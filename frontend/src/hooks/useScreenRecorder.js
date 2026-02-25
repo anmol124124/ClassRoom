@@ -6,6 +6,7 @@ import { useState, useRef, useCallback } from 'react';
 const useScreenRecorder = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
+    const [recordingStream, setRecordingStream] = useState(null);
     const mediaRecorderRef = useRef(null);
     const timerRef = useRef(null);
     const chunksRef = useRef([]);
@@ -27,6 +28,8 @@ const useScreenRecorder = () => {
                     audio: true // Capture system audio
                 });
             }
+
+            setRecordingStream(stream);
 
             // Handle when user stops sharing via browser UI
             stream.getVideoTracks()[0].onended = () => {
@@ -64,6 +67,7 @@ const useScreenRecorder = () => {
                 // Stop all tracks to ensure cleanup (even if external, since sharing UI is already gone or ended)
                 stream.getTracks().forEach(track => track.stop());
 
+                setRecordingStream(null);
                 setIsRecording(false);
                 clearInterval(timerRef.current);
                 setRecordingTime(0);
@@ -98,6 +102,7 @@ const useScreenRecorder = () => {
     return {
         isRecording,
         recordingTime,
+        recordingStream,
         formatTime,
         startRecording,
         stopRecording

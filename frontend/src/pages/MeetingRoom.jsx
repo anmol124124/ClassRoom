@@ -11,7 +11,7 @@ const MeetingRoom = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const { isRecording, recordingTime, formatTime, startRecording, stopRecording } = useScreenRecorder();
+    const { isRecording, recordingTime, recordingStream, formatTime, startRecording, stopRecording } = useScreenRecorder();
 
     // Refs for non-reactive state
     const socket = useRef(null);
@@ -276,9 +276,15 @@ const MeetingRoom = () => {
     const toggleScreenShare = async () => {
         if (!isScreenSharing) {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { frameRate: 15 }
-                });
+                let stream;
+                if (isRecording && recordingStream) {
+                    stream = recordingStream;
+                } else {
+                    stream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { frameRate: 15 }
+                    });
+                }
+
                 screenStreamRef.current = stream;
                 const screenTrack = stream.getVideoTracks()[0];
 
