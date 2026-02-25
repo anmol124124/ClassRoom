@@ -18,6 +18,7 @@ const AdminDashboard = () => {
     const [meetingLoading, setMeetingLoading] = useState(false);
     const [copyStatus, setCopyStatus] = useState('');
     const [meetingError, setMeetingError] = useState(''); // Improved error handling
+    const [meetingSuccess, setMeetingSuccess] = useState('');
 
     // Form states - for create/edit modal (Courses)
     const [showModal, setShowModal] = useState(false);  // Show/hide modal dialog
@@ -70,15 +71,31 @@ const AdminDashboard = () => {
 
         setMeetingLoading(true);
         setMeetingError('');
+        setMeetingSuccess('');
         try {
             await api.post('/meetings/', { title: meetingTitle });
             setMeetingTitle('');
+            setMeetingSuccess('Meeting link generated successfully!');
+            setTimeout(() => setMeetingSuccess(''), 5000); // Clear after 5 seconds
             await fetchMeetings();
         } catch (err) {
             console.error('Failed to create meeting:', err);
             setMeetingError(err.response?.data?.detail || 'Error creating meeting. Please try again.');
         } finally {
             setMeetingLoading(false);
+        }
+    };
+
+    // Handle meeting deletion
+    const handleDeleteMeeting = async (meetingId) => {
+        if (!window.confirm('Are you sure you want to delete this meeting?')) return;
+
+        try {
+            await api.delete(`/meetings/${meetingId}`);
+            await fetchMeetings();
+        } catch (err) {
+            console.error('Failed to delete meeting:', err);
+            setMeetingError('Failed to delete meeting. Please try again.');
         }
     };
 
@@ -175,6 +192,7 @@ const AdminDashboard = () => {
                 <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                     <h2>Create Meeting</h2>
                     {meetingError && <div className="error-message" style={{ marginTop: '1rem' }}>{meetingError}</div>}
+                    {meetingSuccess && <div className="success-message" style={{ marginTop: '1rem' }}>{meetingSuccess}</div>}
                     <form onSubmit={handleCreateMeeting} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                         <input
                             type="text"
@@ -246,6 +264,7 @@ const AdminDashboard = () => {
                                     <th>Created At</th>
                                     <th>Link</th>
                                     <th>Action</th>
+                                    <th>Delete</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -268,13 +287,22 @@ const AdminDashboard = () => {
                                             </button>
                                         </td>
                                         <td>
-                                            <button
-                                                className="btn-primary"
-                                                onClick={() => navigate(`/meeting/${meeting.room_id}`)}
-                                                style={{ padding: '0.4rem 1rem' }}
-                                            >
-                                                Join
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button
+                                                    className="btn-primary"
+                                                    onClick={() => navigate(`/meeting/${meeting.room_id}`)}
+                                                    style={{ padding: '0.4rem 1rem' }}
+                                                >
+                                                    Join
+                                                </button>
+                                                <button
+                                                    className="btn-delete"
+                                                    onClick={() => handleDeleteMeeting(meeting.id)}
+                                                    style={{ padding: '0.4rem 1rem' }}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

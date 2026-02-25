@@ -120,3 +120,22 @@ async def read_meeting(
     
     # Return the meeting details
     return meeting
+
+
+# This endpoint deletes a meeting by its ID
+@router.delete("/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_meeting(
+    meeting_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(check_role([UserRole.ADMIN]))
+):
+    """
+    Delete a meeting (Admin only).
+    """
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    db.delete(meeting)
+    db.commit()
+    return None

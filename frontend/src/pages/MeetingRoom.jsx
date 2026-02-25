@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
+import useScreenRecorder from '../hooks/useScreenRecorder';
 
 const MeetingRoom = () => {
     const { room_id } = useParams();
@@ -8,6 +9,8 @@ const MeetingRoom = () => {
     const [meeting, setMeeting] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    const { isRecording, recordingTime, formatTime, startRecording, stopRecording } = useScreenRecorder();
 
     // Refs for non-reactive state
     const socket = useRef(null);
@@ -285,6 +288,12 @@ const MeetingRoom = () => {
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {meeting.room_id}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    {isRecording && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', padding: '0.4rem 1rem', borderRadius: 'full', fontSize: '0.875rem', fontWeight: 'bold' }}>
+                            <span style={{ width: '8px', height: '8px', background: '#f43f5e', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></span>
+                            REC {formatTime(recordingTime)}
+                        </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.4rem 1rem', borderRadius: 'full', fontSize: '0.875rem', fontWeight: '500' }}>
                         <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
                         {totalParticipants} Online
@@ -377,9 +386,20 @@ const MeetingRoom = () => {
                         background: isVideoOff ? '#f43f5e' : '#e2e8f0', color: isVideoOff ? '#fff' : '#1e293b', fontSize: '1.25rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
                         boxShadow: 'var(--shadow)'
                     }}
-                    title={isMuted ? 'Start Video' : 'Stop Video'}
+                    title={isVideoOff ? 'Start Video' : 'Stop Video'}
                 >
                     {isVideoOff ? '🚫' : '📷'}
+                </button>
+                <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    style={{
+                        width: '48px', height: '48px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isRecording ? '#f43f5e' : '#e2e8f0', color: isRecording ? '#fff' : '#1e293b', fontSize: '1.25rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
+                        boxShadow: 'var(--shadow)'
+                    }}
+                    title={isRecording ? 'Stop Recording' : 'Start Recording'}
+                >
+                    {isRecording ? '⏹️' : '⏺️'}
                 </button>
                 <button
                     onClick={leaveMeeting}
