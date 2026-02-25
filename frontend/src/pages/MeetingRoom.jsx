@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import useScreenRecorder from '../hooks/useScreenRecorder';
-import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp } from 'lucide-react';
 
 const MeetingRoom = () => {
     const { room_id } = useParams();
@@ -16,6 +16,7 @@ const MeetingRoom = () => {
     // Refs for non-reactive state
     const socket = useRef(null);
     const localStreamRef = useRef(null);
+    const screenStreamRef = useRef(null);
     const peerConnections = useRef({}); // { peerId: RTCPeerConnection }
     const myPeerId = useRef(null);
 
@@ -24,6 +25,7 @@ const MeetingRoom = () => {
     const [localStream, setLocalStream] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
 
     const rtcConfig = {
         iceServers: [
@@ -268,6 +270,70 @@ const MeetingRoom = () => {
         navigate(-1);
     };
 
+    const toggleScreenShare = async () => {
+        if (!isScreenSharing) {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: 15 }
+                });
+                screenStreamRef.current = stream;
+                const screenTrack = stream.getVideoTracks()[0];
+
+                // Replace track in all peer connections
+                Object.values(peerConnections.current).forEach(pc => {
+                    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) {
+                        sender.replaceTrack(screenTrack);
+                    }
+                });
+
+                // Update local preview
+                setLocalStream(stream);
+                setIsScreenSharing(true);
+
+                // Disable camera track if it was active
+                if (localStreamRef.current) {
+                    localStreamRef.current.getVideoTracks().forEach(track => track.enabled = false);
+                }
+
+                // Handle stop sharing from browser UI
+                screenTrack.onended = () => {
+                    stopScreenShare();
+                };
+
+            } catch (err) {
+                console.error('Error starting screen share:', err);
+            }
+        } else {
+            stopScreenShare();
+        }
+    };
+
+    const stopScreenShare = () => {
+        // If we are recording, we don't stop the tracks yet because the recorder is using them.
+        // The useScreenRecorder hook will handle the cleanup when recording stops.
+        if (screenStreamRef.current && !isRecording) {
+            screenStreamRef.current.getTracks().forEach(track => track.stop());
+            screenStreamRef.current = null;
+        }
+
+        const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+        if (cameraTrack) {
+            cameraTrack.enabled = !isVideoOff;
+
+            // Restore track in all peer connections
+            Object.values(peerConnections.current).forEach(pc => {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video' || s.track === null);
+                if (sender) {
+                    sender.replaceTrack(cameraTrack);
+                }
+            });
+        }
+
+        setLocalStream(localStreamRef.current);
+        setIsScreenSharing(false);
+    };
+
     if (loading) return <div className="loading" style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Initializing Meeting Experience...</div>;
     if (error) return (
         <div className="error-container" style={{ height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2rem' }}>
@@ -413,7 +479,7 @@ const MeetingRoom = () => {
 
                 {/* Recording Button */}
                 <button
-                    onClick={isRecording ? stopRecording : startRecording}
+                    onClick={() => isRecording ? stopRecording() : startRecording(isScreenSharing ? screenStreamRef.current : null)}
                     style={{
                         width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
                         background: isRecording ? '#ef4444' : '#f1f5f9', color: isRecording ? '#fff' : '#475569',
@@ -424,8 +490,26 @@ const MeetingRoom = () => {
                     onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
                     title={isRecording ? 'Stop Recording' : 'Start Recording'}
+                    disabled={isRecording === false && false} // Placeholder for potential future disable logic
                 >
                     {isRecording ? <Square size={24} fill="currentColor" /> : <Circle size={24} fill={isRecording ? 'currentColor' : 'none'} />}
+                </button>
+
+                {/* Screen Share Button */}
+                <button
+                    onClick={toggleScreenShare}
+                    style={{
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isScreenSharing ? '#3b82f6' : '#f1f5f9', color: isScreenSharing ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
+                    title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+                >
+                    <MonitorUp size={24} />
                 </button>
 
                 <button

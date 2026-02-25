@@ -10,15 +10,23 @@ const useScreenRecorder = () => {
     const timerRef = useRef(null);
     const chunksRef = useRef([]);
 
-    const startRecording = useCallback(async () => {
+    const startRecording = useCallback(async (existingStream = null) => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return;
+
         try {
-            // Request screen recording stream
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    cursor: "always"
-                },
-                audio: true // Capture system audio
-            });
+            let stream = existingStream;
+            let isExternalStream = !!existingStream;
+
+            if (!stream) {
+                // Request screen recording stream only if no existing stream provided
+                stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: "always",
+                        frameRate: 15
+                    },
+                    audio: true // Capture system audio
+                });
+            }
 
             // Handle when user stops sharing via browser UI
             stream.getVideoTracks()[0].onended = () => {
@@ -26,7 +34,8 @@ const useScreenRecorder = () => {
             };
 
             const mediaRecorder = new MediaRecorder(stream, {
-                mimeType: 'video/webm; codecs=vp9'
+                mimeType: 'video/webm; codecs=vp8',
+                videoBitsPerSecond: 1200000
             });
 
             mediaRecorderRef.current = mediaRecorder;
@@ -39,7 +48,7 @@ const useScreenRecorder = () => {
             };
 
             mediaRecorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+                const blob = new Blob(chunksRef.current, { type: 'video/webm; codecs=vp8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.style.display = 'none';
@@ -52,7 +61,7 @@ const useScreenRecorder = () => {
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
 
-                // Stop all tracks
+                // Stop all tracks to ensure cleanup (even if external, since sharing UI is already gone or ended)
                 stream.getTracks().forEach(track => track.stop());
 
                 setIsRecording(false);
