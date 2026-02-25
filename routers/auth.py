@@ -18,7 +18,7 @@ from database import get_db
 # Function that gives us a database connection
 
 from models import User
-# User table model (represents users in the database)
+# User table model (represents uslisteners in the database)
 
 from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 # verify_password → checks if password is correct

@@ -2,11 +2,18 @@ import React, { useState, useEffect } from 'react';
 // API client for making requests to backend
 import api from '../api/api';
 
+import { useNavigate } from 'react-router-dom';
+
 const TutorDashboard = () => {
+    const navigate = useNavigate();
     // State for courses list
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);  // Loading state while fetching
     const [error, setError] = useState('');  // Error messages
+
+    // Meeting states
+    const [meetings, setMeetings] = useState([]);
+    const [copyStatus, setCopyStatus] = useState('');
 
     // Form states - for edit modal
     const [showModal, setShowModal] = useState(false);  // Show/hide modal
@@ -17,29 +24,53 @@ const TutorDashboard = () => {
     // Function to fetch all courses from backend
     const fetchCourses = async () => {
         try {
-            setLoading(true);
-            // Make API request to get all courses
             const response = await api.get('/courses/');
-            // Update courses list
             setCourses(response.data);
         } catch (err) {
             setError('Failed to fetch courses. Please try again.');
             console.error(err);
-        } finally {
-            setLoading(false);
         }
     };
 
-    // Fetch courses when component first loads
+    // Function to fetch all meetings from backend
+    const fetchMeetings = async () => {
+        try {
+            const response = await api.get('/meetings/');
+            setMeetings(response.data);
+        } catch (err) {
+            console.error('Failed to fetch meetings:', err);
+            setError(prev => prev ? prev : 'Some data failed to load. Please refresh.');
+        }
+    };
+
+    // Fetch data when component first loads
     useEffect(() => {
-        fetchCourses();
+        const loadData = async () => {
+            setLoading(true);
+            await Promise.all([fetchCourses(), fetchMeetings()]);
+            setLoading(false);
+        };
+        loadData();
     }, []);
+
+    // Handle join meeting
+    const handleJoinMeeting = (roomId) => {
+        navigate(`/meeting/${roomId}`);
+    };
 
     // Open modal to edit a course
     const handleOpenEditModal = (course) => {
         setCurrentCourse(course);
         setShowModal(true);
         setFormError('');
+    };
+
+    // Handle copy link to clipboard
+    const copyToClipboard = (url) => {
+        navigator.clipboard.writeText(url).then(() => {
+            setCopyStatus(url);
+            setTimeout(() => setCopyStatus(''), 2000);
+        });
     };
 
     // Close modal and reset form
@@ -70,58 +101,109 @@ const TutorDashboard = () => {
         }
     };
 
-    // Show loading message while fetching initial courses
-    if (loading && courses.length === 0) return <div className="loading">Loading courses...</div>;
+    // Show loading message while fetching initial data
+    if (loading) return <div className="loading">Loading dashboard data...</div>;
 
     return (
         <div className="dashboard">
             {/* Dashboard header */}
             <header className="dashboard-header">
                 <h1>Tutor Dashboard</h1>
-                <p className="text-muted">Manage assigned course content</p>
+                <p className="text-muted">Manage assigned course content and join meetings</p>
             </header>
 
             {/* Show error if fetching failed */}
             {error && <div className="error-message">{error}</div>}
 
-            {/* Courses table section */}
-            <div className="course-list-section">
-                <h2>My Courses</h2>
-                <div className="table-responsive">
-                    <table className="admin-table">
-                        {/* Table header */}
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Title</th>
-                                <th>Description</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        {/* Table body - list all courses */}
-                        <tbody>
-                            {courses.map(course => (
-                                <tr key={course.id}>
-                                    <td>{course.id}</td>
-                                    <td>{course.title}</td>
-                                    {/* Show "No description" if course has no description */}
-                                    <td>{course.description || <span className="text-muted">No description</span>}</td>
-                                    <td>
-                                        <div className="action-btns">
-                                            {/* Edit button - opens modal with course data */}
-                                            <button className="btn-edit" onClick={() => handleOpenEditModal(course)}>Edit</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {/* Show message if no courses exist */}
-                            {courses.length === 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+                {/* Courses table section */}
+                <div className="course-list-section">
+                    <h2>My Courses</h2>
+                    <div className="table-responsive">
+                        <table className="admin-table">
+                            <thead>
                                 <tr>
-                                    <td colSpan="4" className="text-center">No courses found.</td>
+                                    <th>ID</th>
+                                    <th>Title</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {courses.map(course => (
+                                    <tr key={course.id}>
+                                        <td>{course.id}</td>
+                                        <td>{course.title}</td>
+                                        <td>{course.description || <span className="text-muted">No description</span>}</td>
+                                        <td>
+                                            <div className="action-btns">
+                                                <button className="btn-edit" onClick={() => handleOpenEditModal(course)}>Edit</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {courses.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="text-center">No courses found.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Meetings List section */}
+                <div className="course-list-section">
+                    <h2>Scheduled Meetings</h2>
+                    <div className="table-responsive">
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Room ID</th>
+                                    <th>Created At</th>
+                                    <th>Link</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {meetings.map(meeting => (
+                                    <tr key={meeting.id}>
+                                        <td>{meeting.title}</td>
+                                        <td>
+                                            <code style={{ background: '#f3f4f6', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>
+                                                {meeting.room_id}
+                                            </code>
+                                        </td>
+                                        <td>{new Date(meeting.created_at.endsWith('Z') ? meeting.created_at : meeting.created_at + 'Z').toLocaleString()}</td>
+                                        <td>
+                                            <button
+                                                className="btn-edit"
+                                                onClick={() => copyToClipboard(meeting.meeting_url)}
+                                                style={{ minWidth: '100px' }}
+                                            >
+                                                {copyStatus === meeting.meeting_url ? 'Copied Link!' : 'Copy Link'}
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="btn-primary"
+                                                onClick={() => handleJoinMeeting(meeting.room_id)}
+                                                style={{ padding: '0.4rem 1rem' }}
+                                            >
+                                                Join
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {meetings.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="text-center">No meetings scheduled.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -130,11 +212,8 @@ const TutorDashboard = () => {
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <h2>Edit Course</h2>
-                        {/* Show form errors if any */}
                         {formError && <div className="error-message">{formError}</div>}
-                        {/* Form for course data */}
                         <form onSubmit={handleSubmit}>
-                            {/* Course title input */}
                             <div className="form-group">
                                 <label>Course Title</label>
                                 <input
@@ -145,7 +224,6 @@ const TutorDashboard = () => {
                                     required
                                 />
                             </div>
-                            {/* Course description input */}
                             <div className="form-group">
                                 <label>Description</label>
                                 <textarea
@@ -155,11 +233,8 @@ const TutorDashboard = () => {
                                     rows="4"
                                 />
                             </div>
-                            {/* Modal action buttons */}
                             <div className="modal-actions">
-                                {/* Cancel button */}
                                 <button type="button" className="btn-secondary" onClick={handleCloseModal}>Cancel</button>
-                                {/* Save button */}
                                 <button type="submit" className="btn-primary" disabled={submitting}>
                                     {submitting ? 'Saving...' : 'Update Course'}
                                 </button>

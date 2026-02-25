@@ -13,6 +13,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import TutorDashboard from './pages/TutorDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 
+import MeetingRoom from './pages/MeetingRoom';
+
 function App() {
   return (
     // AuthProvider: Wraps entire app so all components can access auth context
@@ -53,6 +55,16 @@ function App() {
               element={
                 <ProtectedRoute roles={['student']}>
                   <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Meeting Room - accessible by all authenticated roles */}
+            <Route
+              path="/meeting/:room_id"
+              element={
+                <ProtectedRoute roles={['admin', 'tutor', 'student']}>
+                  <MeetingRoom />
                 </ProtectedRoute>
               }
             />

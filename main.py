@@ -1,4 +1,11 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 # FastAPI → main framework
 # Depends → for dependency injection (not heavily used here)
 
@@ -14,7 +21,7 @@ from models import User, UserRole
 from auth import get_password_hash
 # get_password_hash → hashes plain password before storing in DB
 
-from routers import auth, users, courses
+from routers import auth, users, courses, meetings, signaling
 # Import all route files (auth routes, user routes, course routes)
 
 from sqlalchemy.orm import Session
@@ -48,10 +55,7 @@ app = FastAPI(title="Course Management System")
 # Without CORS, browser would block requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",   # React dev server
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],  # Allow all origins for ngrok compatibility
     allow_credentials=True,
     allow_methods=["*"],  # allow all HTTP methods (GET, POST etc.)
     allow_headers=["*"],  # allow all headers
@@ -126,6 +130,32 @@ async def startup_event():
 app.include_router(auth.router)     # login routes
 app.include_router(users.router)    # user routes
 app.include_router(courses.router)  # course routes
+app.include_router(meetings.router) # meeting routes
+app.include_router(signaling.router) # signaling routes (WebSocket)
+
+# =====================================
+# SERVE FRONTEND (Single Tunnel Support)
+# =====================================
+
+# Get absolute path to the frontend/dist folder
+frontend_dist = os.path.join(os.getcwd(), "frontend", "dist")
+
+# Mount assets folder (CSS, JS)
+if os.path.exists(os.path.join(frontend_dist, "assets")):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+
+# Catch-all route to serve the SPA (React handles routing)
+@app.get("/{rest_of_path:path}")
+async def serve_frontend(request: Request, rest_of_path: str):
+    # Don't intercept API or WebSocket calls that might have slipped through
+    if rest_of_path.startswith("api/") or rest_of_path.startswith("ws/"):
+        return {"detail": "Not Found"}
+    
+    # Serve index.html for all other paths
+    index_path = os.path.join(frontend_dist, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Frontend build not found. Please run 'npm run build' in the frontend directory."}
 
 
 # =====================================

@@ -1,20 +1,31 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 // API client for making requests to backend
 import api from '../api/api';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
+    const { user } = useAuth();
     // State for courses list
     const [courses, setCourses] = useState([]);
-    const [loading, setLoading] = useState(true);  // Loading state while fetching courses
-    const [error, setError] = useState('');  // Error messages for course list
+    const [loading, setLoading] = useState(true);  // Loading state while fetching data
+    const [error, setError] = useState('');  // Error messages for data fetching
 
-    // Form states - for create/edit modal
+    // Meeting states
+    const [meetings, setMeetings] = useState([]);
+    const [meetingTitle, setMeetingTitle] = useState('');
+    const [meetingLoading, setMeetingLoading] = useState(false);
+    const [copyStatus, setCopyStatus] = useState('');
+    const [meetingError, setMeetingError] = useState(''); // Improved error handling
+
+    // Form states - for create/edit modal (Courses)
     const [showModal, setShowModal] = useState(false);  // Show/hide modal dialog
     const [isEditing, setIsEditing] = useState(false);  // True if editing, false if creating
     const [currentCourse, setCurrentCourse] = useState({ title: '', description: '' });  // Current course being edited
     const [formError, setFormError] = useState('');  // Error messages for form
     const [submitting, setSubmitting] = useState(false);  // Loading state while saving
-    
+
     // States for delete confirmation modal
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [courseToDelete, setCourseToDelete] = useState(null);
@@ -22,23 +33,62 @@ const AdminDashboard = () => {
     // Function to fetch all courses from backend
     const fetchCourses = async () => {
         try {
-            setLoading(true);
-            // Make API request to get all courses
             const response = await api.get('/courses/');
-            // Update courses list with data from backend
             setCourses(response.data);
         } catch (err) {
             setError('Failed to fetch courses. Please try again.');
             console.error(err);
-        } finally {
-            setLoading(false);
         }
     };
 
-    // Fetch courses when component first loads
+    // Function to fetch all meetings from backend
+    const fetchMeetings = async () => {
+        try {
+            setMeetingError('');
+            const response = await api.get('/meetings/');
+            setMeetings(response.data);
+        } catch (err) {
+            console.error('Failed to fetch meetings:', err);
+            setMeetingError('Failed to fetch existing meetings.');
+        }
+    };
+
+    // Fetch data when component first loads
     useEffect(() => {
-        fetchCourses();
+        const loadData = async () => {
+            setLoading(true);
+            await Promise.all([fetchCourses(), fetchMeetings()]);
+            setLoading(false);
+        };
+        loadData();
     }, []);
+
+    // Handle meeting creation
+    const handleCreateMeeting = async (e) => {
+        e.preventDefault();
+        if (!meetingTitle.trim()) return;
+
+        setMeetingLoading(true);
+        setMeetingError('');
+        try {
+            await api.post('/meetings/', { title: meetingTitle });
+            setMeetingTitle('');
+            await fetchMeetings();
+        } catch (err) {
+            console.error('Failed to create meeting:', err);
+            setMeetingError(err.response?.data?.detail || 'Error creating meeting. Please try again.');
+        } finally {
+            setMeetingLoading(false);
+        }
+    };
+
+    // Handle copy link to clipboard
+    const copyToClipboard = (url) => {
+        navigator.clipboard.writeText(url).then(() => {
+            setCopyStatus(url);
+            setTimeout(() => setCopyStatus(''), 2000);
+        });
+    };
 
     // Open modal for creating new course or editing existing one
     const handleOpenModal = (course = { title: '', description: '' }) => {
@@ -108,61 +158,134 @@ const AdminDashboard = () => {
         }
     };
 
-    // Show loading message while fetching initial courses
-    if (loading && courses.length === 0) return <div className="loading">Loading courses...</div>;
+    // Show loading message while fetching initial data
+    if (loading) return <div className="loading">Loading dashboard data...</div>;
 
     return (
         <div className="dashboard">
-            {/* Dashboard header with title and create button */}
+            {/* Dashboard header with title */}
             <header className="dashboard-header">
                 <h1>Admin Dashboard</h1>
-                {/* Button to open modal for creating new course */}
-                <button className="btn-primary" onClick={() => handleOpenModal()}>+ Create New Course</button>
             </header>
 
-            {/* Show error message if fetching courses failed */}
             {error && <div className="error-message">{error}</div>}
 
-            {/* Courses table section */}
-            <div className="course-list-section">
-                <h2>Manage Courses</h2>
-                <div className="table-responsive">
-                    <table className="admin-table">
-                        {/* Table header */}
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Title</th>
-                                <th>Description</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        {/* Table body - list all courses */}
-                        <tbody>
-                            {courses.map(course => (
-                                <tr key={course.id}>
-                                    <td>{course.id}</td>
-                                    <td>{course.title}</td>
-                                    {/* Show "No description" if course has no description */}
-                                    <td>{course.description || <span className="text-muted">No description</span>}</td>
-                                    <td>
-                                        <div className="action-btns">
-                                            {/* Edit button - opens modal with course data */}
-                                            <button className="btn-edit" onClick={() => handleOpenModal(course)}>Edit</button>
-                                            {/* Delete button - opens delete confirmation */}
-                                            <button className="btn-delete" onClick={() => handleDeleteClick(course)}>Delete</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {/* Show message if no courses exist */}
-                            {courses.length === 0 && (
+            {/* Meeting Section - Admin only visibility check */}
+            {user?.role === 'admin' && (
+                <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                    <h2>Create Meeting</h2>
+                    {meetingError && <div className="error-message" style={{ marginTop: '1rem' }}>{meetingError}</div>}
+                    <form onSubmit={handleCreateMeeting} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                        <input
+                            type="text"
+                            placeholder="Meeting Title"
+                            value={meetingTitle}
+                            onChange={(e) => setMeetingTitle(e.target.value)}
+                            style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ddd' }}
+                            required
+                        />
+                        <button type="submit" className="btn-primary" disabled={meetingLoading}>
+                            {meetingLoading ? 'Creating...' : 'Create Meeting'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {/* Content Tabs/Sections */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+
+                {/* Courses section */}
+                <div className="course-list-section">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h2>Manage Courses</h2>
+                        <button className="btn-primary" onClick={() => handleOpenModal()}>+ Create New Course</button>
+                    </div>
+                    <div className="table-responsive">
+                        <table className="admin-table">
+                            <thead>
                                 <tr>
-                                    <td colSpan="4" className="text-center">No courses found.</td>
+                                    <th>ID</th>
+                                    <th>Title</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {courses.map(course => (
+                                    <tr key={course.id}>
+                                        <td>{course.id}</td>
+                                        <td>{course.title}</td>
+                                        <td>{course.description || <span className="text-muted">No description</span>}</td>
+                                        <td>
+                                            <div className="action-btns">
+                                                <button className="btn-edit" onClick={() => handleOpenModal(course)}>Edit</button>
+                                                <button className="btn-delete" onClick={() => handleDeleteClick(course)}>Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {courses.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="text-center">No courses found.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Meetings List section */}
+                <div className="course-list-section">
+                    <h2>Scheduled Meetings</h2>
+                    <div className="table-responsive">
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Room ID</th>
+                                    <th>Created At</th>
+                                    <th>Link</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {meetings.map(meeting => (
+                                    <tr key={meeting.id}>
+                                        <td>{meeting.title}</td>
+                                        <td>
+                                            <code style={{ background: '#f3f4f6', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>
+                                                {meeting.room_id}
+                                            </code>
+                                        </td>
+                                        <td>{new Date(meeting.created_at.endsWith('Z') ? meeting.created_at : meeting.created_at + 'Z').toLocaleString()}</td>
+                                        <td>
+                                            <button
+                                                className="btn-edit"
+                                                onClick={() => copyToClipboard(meeting.meeting_url)}
+                                                style={{ minWidth: '100px' }}
+                                            >
+                                                {copyStatus === meeting.meeting_url ? 'Copied Link!' : 'Copy Link'}
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="btn-primary"
+                                                onClick={() => navigate(`/meeting/${meeting.room_id}`)}
+                                                style={{ padding: '0.4rem 1rem' }}
+                                            >
+                                                Join
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {meetings.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="text-center">No meetings scheduled.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -170,13 +293,9 @@ const AdminDashboard = () => {
             {showModal && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        {/* Modal title changes based on create vs edit */}
                         <h2>{isEditing ? 'Edit Course' : 'Create New Course'}</h2>
-                        {/* Show form errors if any */}
                         {formError && <div className="error-message">{formError}</div>}
-                        {/* Form for course data */}
                         <form onSubmit={handleSubmit}>
-                            {/* Course title input */}
                             <div className="form-group">
                                 <label>Course Title</label>
                                 <input
@@ -187,7 +306,6 @@ const AdminDashboard = () => {
                                     required
                                 />
                             </div>
-                            {/* Course description input */}
                             <div className="form-group">
                                 <label>Description</label>
                                 <textarea
@@ -197,11 +315,8 @@ const AdminDashboard = () => {
                                     rows="4"
                                 />
                             </div>
-                            {/* Modal action buttons */}
                             <div className="modal-actions">
-                                {/* Cancel button */}
                                 <button type="button" className="btn-secondary" onClick={handleCloseModal}>Cancel</button>
-                                {/* Save/Create button - button text changes based on action */}
                                 <button type="submit" className="btn-primary" disabled={submitting}>
                                     {submitting ? 'Saving...' : (isEditing ? 'Update Course' : 'Create Course')}
                                 </button>
@@ -210,20 +325,16 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             )}
+
             {/* Modal for Delete Confirmation */}
             {showDeleteModal && (
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <h2>Confirm Deletion</h2>
-                        {/* Show errors from delete operation */}
                         {formError && <div className="error-message">{formError}</div>}
-                        {/* Confirmation message with course name */}
                         <p style={{ marginBottom: '1.5rem' }}>Are you sure you want to delete the course <strong>{courseToDelete?.title}</strong>? This action cannot be undone.</p>
-                        {/* Action buttons for delete confirmation */}
                         <div className="modal-actions">
-                            {/* Cancel - close without deleting */}
                             <button type="button" className="btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
-                            {/* Confirm delete */}
                             <button type="button" className="btn-delete" onClick={confirmDelete} disabled={submitting}>
                                 {submitting ? 'Deleting...' : 'Yes, Delete'}
                             </button>

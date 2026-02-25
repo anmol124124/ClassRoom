@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from datetime import datetime
 import enum
 
 # UserRole - Same roles as in models, used for data validation
@@ -51,6 +52,24 @@ class CourseCreate(CourseBase):
 # Course - Schema for returning course info from database
 class Course(CourseBase):
     id: int  # Course ID from database
+
+    class Config:
+        from_attributes = True
+
+# MeetingBase - Base schema for meetings
+class MeetingBase(BaseModel):
+    title: str
+
+# MeetingCreate - Schema for creating a new meeting
+class MeetingCreate(MeetingBase):
+    pass
+
+# MeetingResponse - Schema for returning meeting info
+class MeetingResponse(MeetingBase):
+    id: int
+    room_id: str
+    meeting_url: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

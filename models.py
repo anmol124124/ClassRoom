@@ -1,4 +1,7 @@
-from sqlalchemy import Column, Integer, String, Enum
+from sqlalchemy import Column, Integer, String, Enum, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+import datetime
+import os
 # Column → used to define table columns
 # Integer, String → data types for columns
 # Enum → used for fixed set of values
@@ -44,6 +47,9 @@ class User(Base):
     # Role of user (admin/tutor/student)
     role = Column(String, default=UserRole.STUDENT)
 
+    # Relationship to meetings
+    meetings = relationship("Meeting", back_populates="creator")
+
 
 # =====================================
 # COURSE TABLE MODEL
@@ -61,3 +67,26 @@ class Course(Base):
 
     # Course description (optional)
     description = Column(String, nullable=True)
+
+
+# =====================================
+# MEETING TABLE MODEL
+# =====================================
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    room_id = Column(String, unique=True, index=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    # Relationship to user
+    creator = relationship("User", back_populates="meetings")
+
+    @property
+    def meeting_url(self):
+        # Return the absolute frontend join URL using room_id and FRONTEND_URL
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+        return f"{frontend_url}/meeting/{self.room_id}"
