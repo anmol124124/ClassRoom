@@ -76,6 +76,7 @@ const AdminDashboard = () => {
             await api.post('/meetings/', { title: meetingTitle });
             setMeetingTitle('');
             setMeetingSuccess('Meeting link generated successfully!');
+            alert('Meeting link generated successfully!');
             setTimeout(() => setMeetingSuccess(''), 5000); // Clear after 5 seconds
             await fetchMeetings();
         } catch (err) {
