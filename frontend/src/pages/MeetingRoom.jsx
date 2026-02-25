@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import useScreenRecorder from '../hooks/useScreenRecorder';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users } from 'lucide-react';
 
 const MeetingRoom = () => {
     const { room_id } = useParams();
@@ -294,8 +295,8 @@ const MeetingRoom = () => {
                             REC {formatTime(recordingTime)}
                         </div>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.4rem 1rem', borderRadius: 'full', fontSize: '0.875rem', fontWeight: '500' }}>
-                        <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#ecfdf5', color: '#059669', padding: '0.5rem 1rem', borderRadius: '30px', fontSize: '0.875rem', fontWeight: '600', border: '1px solid #d1fae5' }}>
+                        <Users size={16} />
                         {totalParticipants} Online
                     </div>
                 </div>
@@ -367,48 +368,80 @@ const MeetingRoom = () => {
             </div>
 
             {/* Controls Bar */}
-            <footer style={{ padding: '1.25rem', background: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5rem', borderTop: '1px solid #e5e7eb', zIndex: 20 }}>
+            <footer style={{
+                padding: '1.5rem',
+                background: 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '1.25rem',
+                borderTop: '1px solid #e5e7eb',
+                zIndex: 20,
+                boxShadow: '0 -4px 20px rgba(0,0,0,0.05)'
+            }}>
                 <button
                     onClick={toggleMute}
                     style={{
-                        width: '48px', height: '48px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                        background: isMuted ? '#f43f5e' : '#e2e8f0', color: isMuted ? '#fff' : '#1e293b', fontSize: '1.25rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
-                        boxShadow: 'var(--shadow)'
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isMuted ? '#ef4444' : '#f1f5f9', color: isMuted ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
                     title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                    {isMuted ? '🔇' : '🎤'}
+                    {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
                 </button>
                 <button
                     onClick={toggleVideo}
                     style={{
-                        width: '48px', height: '48px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                        background: isVideoOff ? '#f43f5e' : '#e2e8f0', color: isVideoOff ? '#fff' : '#1e293b', fontSize: '1.25rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
-                        boxShadow: 'var(--shadow)'
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isVideoOff ? '#ef4444' : '#f1f5f9', color: isVideoOff ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
                     title={isVideoOff ? 'Start Video' : 'Stop Video'}
                 >
-                    {isVideoOff ? '🚫' : '📷'}
+                    {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
                 </button>
+
+                {/* Recording Button */}
                 <button
                     onClick={isRecording ? stopRecording : startRecording}
                     style={{
-                        width: '48px', height: '48px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                        background: isRecording ? '#f43f5e' : '#e2e8f0', color: isRecording ? '#fff' : '#1e293b', fontSize: '1.25rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
-                        boxShadow: 'var(--shadow)'
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isRecording ? '#ef4444' : '#f1f5f9', color: isRecording ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
                     title={isRecording ? 'Stop Recording' : 'Start Recording'}
                 >
-                    {isRecording ? '⏹️' : '⏺️'}
+                    {isRecording ? <Square size={24} fill="currentColor" /> : <Circle size={24} fill={isRecording ? 'currentColor' : 'none'} />}
                 </button>
+
                 <button
                     onClick={leaveMeeting}
                     style={{
-                        padding: '0 2rem', height: '48px', borderRadius: '24px', border: 'none', cursor: 'pointer',
-                        background: '#f43f5e', color: '#fff', fontWeight: '600', fontSize: '0.9rem', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s',
-                        boxShadow: 'var(--shadow)'
+                        padding: '0 2rem', height: '56px', borderRadius: '30px', border: 'none', cursor: 'pointer',
+                        background: '#f43f5e', color: '#fff', fontWeight: 'bold', fontSize: '0.95rem',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 14px 0 rgba(244, 63, 94, 0.39)',
+                        outline: 'none',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(244, 63, 94, 0.43)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px 0 rgba(244, 63, 94, 0.39)'; }}
                 >
+                    <PhoneOff size={20} />
                     Leave Room
                 </button>
             </footer>
