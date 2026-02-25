@@ -267,6 +267,9 @@ const MeetingRoom = () => {
     };
 
     const leaveMeeting = () => {
+        if (isRecording) {
+            stopRecording();
+        }
         navigate(-1);
     };
 
