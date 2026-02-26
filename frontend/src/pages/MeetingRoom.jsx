@@ -4,6 +4,83 @@ import api from '../api/api';
 import useScreenRecorder from '../hooks/useScreenRecorder';
 import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp } from 'lucide-react';
 
+const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker, transform = 'none', maxWidth = '100%', totalParticipants = 1 }) => {
+    const videoTrack = stream?.getVideoTracks()[0];
+    const isVideoDisabled = !videoTrack || !videoTrack.enabled;
+    const displayLabel = isLocal ? `${username} (You)` : username;
+
+    return (
+        <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
+            position: 'relative',
+            background: '#1f2937',
+            borderRadius: '20px',
+            overflow: 'hidden',
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+            border: '1px solid #d1d5db',
+            aspectRatio: '16/9',
+            width: '100%',
+            maxWidth: maxWidth,
+            justifySelf: 'center',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+        }}>
+            {!isVideoDisabled ? (
+                <video
+                    autoPlay
+                    playsInline
+                    muted={isLocal}
+                    ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
+                />
+            ) : (
+                <div style={{
+                    width: totalParticipants === 1 ? '120px' : '80px',
+                    height: totalParticipants === 1 ? '120px' : '80px',
+                    background: '#374151',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: totalParticipants === 1 ? '3rem' : '2rem',
+                    color: '#fff',
+                    fontWeight: '600'
+                }}>
+                    {getInitials(username)}
+                </div>
+            )}
+
+            <div style={{
+                position: 'absolute',
+                bottom: '1.25rem',
+                left: '1.25rem',
+                background: 'rgba(0, 0, 0, 0.6)',
+                backdropFilter: 'blur(4px)',
+                color: '#fff',
+                padding: '0.5rem 1rem',
+                borderRadius: '10px',
+                fontSize: '0.85rem',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                zIndex: 10
+            }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isLocal ? '#10b981' : '#3b82f6' }}></div>
+                {displayLabel} {isMuted && '🎤❌'}
+            </div>
+        </div>
+    );
+};
+
 const MeetingRoom = () => {
     const { room_id } = useParams();
     const navigate = useNavigate();
@@ -32,6 +109,7 @@ const MeetingRoom = () => {
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [activePresenterId, setActivePresenterId] = useState(null); // ID of the participant currently sharing screen
     const [activeSpeakerId, setActiveSpeakerId] = useState(null); // ID of the current active speaker
+    const [participantNames, setParticipantNames] = useState({}); // UUID -> Name mapping
 
     const rtcConfig = {
         iceServers: [
@@ -147,15 +225,36 @@ const MeetingRoom = () => {
                 case 'init':
                     myPeerId.current = peer_id;
                     console.log('Assigned Peer ID:', peer_id);
+                    // Immediately send joining info with our username
+                    socket.current.send(JSON.stringify({
+                        type: 'join',
+                        roomId: room_id,
+                        userId: peer_id,
+                        username: localStorage.getItem('username') || 'Guest'
+                    }));
+                    break;
+                case 'participants':
+                    console.log('Received participants list:', data.users);
+                    if (data.presenter !== undefined) {
+                        setActivePresenterId(data.presenter);
+                    }
+                    const newNames = {};
+                    data.users.forEach(u => {
+                        peerNamesRef.current[u.userId] = u.username;
+                        newNames[u.userId] = u.username;
+                    });
+                    setParticipantNames(newNames);
+                    // Trigger re-render to update names on tiles
+                    setPeers(prev => [...prev]);
                     break;
                 case 'join':
                     console.log('New participant joined:', sender_id);
                     // Initiate offer to the new participant
-                    createPeerConnection(sender_id, stream, true);
+                    createPeerConnection(sender_id, true);
                     break;
                 case 'offer':
                     console.log('Received WebRTC offer from:', sender_id);
-                    handleOffer(sender_id, offer, stream);
+                    handleOffer(sender_id, offer);
                     break;
                 case 'answer':
                     console.log('Received WebRTC answer from:', sender_id);
@@ -213,7 +312,7 @@ const MeetingRoom = () => {
         }
     };
 
-    const createPeerConnection = (remotePeerId, stream, isInitiator) => {
+    const createPeerConnection = (remotePeerId, isInitiator) => {
         // If PC already exists for this peer, close it first
         if (peerConnections.current[remotePeerId]) {
             peerConnections.current[remotePeerId].close();
@@ -222,8 +321,12 @@ const MeetingRoom = () => {
         const pc = new RTCPeerConnection(rtcConfig);
         peerConnections.current[remotePeerId] = pc;
 
-        // Add local tracks to the connection
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        // Active Stream Sensing: Use screen share if active, otherwise camera
+        const currentStream = screenStreamRef.current || localStreamRef.current;
+        if (currentStream) {
+            console.log(`Adding tracks from ${screenStreamRef.current ? 'screen' : 'camera'} stream to PC for:`, remotePeerId);
+            currentStream.getTracks().forEach(track => pc.addTrack(track, currentStream));
+        }
 
         // Listen for remote tracks
         pc.ontrack = (event) => {
@@ -285,8 +388,8 @@ const MeetingRoom = () => {
         return pc;
     };
 
-    const handleOffer = async (remotePeerId, offer, stream) => {
-        const pc = createPeerConnection(remotePeerId, stream, false);
+    const handleOffer = async (remotePeerId, offer) => {
+        const pc = createPeerConnection(remotePeerId, false);
         try {
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
             const answer = await pc.createAnswer();
@@ -342,81 +445,6 @@ const MeetingRoom = () => {
         setPeers(prev => prev.filter(p => p.id !== remotePeerId));
     };
 
-    const getInitials = (name) => {
-        if (!name) return '?';
-        const parts = name.trim().split(' ');
-        if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    };
-
-    const VideoTile = ({ stream, label, isMuted, isLocal, isActiveSpeaker, transform = 'none', maxWidth = '100%' }) => {
-        const videoTrack = stream?.getVideoTracks()[0];
-        const isVideoDisabled = !videoTrack || !videoTrack.enabled;
-
-        return (
-            <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
-                position: 'relative',
-                background: '#1f2937', // Darker background for video tiles
-                borderRadius: '20px',
-                overflow: 'hidden',
-                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                border: '1px solid #d1d5db',
-                aspectRatio: '16/9',
-                width: '100%',
-                maxWidth: maxWidth,
-                justifySelf: 'center',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-            }}>
-                {!isVideoDisabled ? (
-                    <video
-                        autoPlay
-                        playsInline
-                        muted={isLocal}
-                        ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
-                    />
-                ) : (
-                    <div style={{
-                        width: totalParticipants === 1 ? '120px' : '80px',
-                        height: totalParticipants === 1 ? '120px' : '80px',
-                        background: '#374151',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: totalParticipants === 1 ? '3rem' : '2rem',
-                        color: '#fff',
-                        fontWeight: '600'
-                    }}>
-                        {getInitials(label === 'You' ? localStorage.getItem('username') : label)}
-                    </div>
-                )}
-
-                <div style={{
-                    position: 'absolute',
-                    bottom: '1.25rem',
-                    left: '1.25rem',
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    backdropFilter: 'blur(4px)',
-                    color: '#fff',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '10px',
-                    fontSize: '0.85rem',
-                    fontWeight: '500',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    zIndex: 10
-                }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isLocal ? '#10b981' : '#3b82f6' }}></div>
-                    {isLocal ? `${localStorage.getItem('username')} (You)` : label} {isMuted && '🎤❌'}
-                </div>
-            </div>
-        );
-    };
 
     const toggleMute = () => {
         if (localStreamRef.current) {
@@ -632,7 +660,7 @@ const MeetingRoom = () => {
                                 />
                             </div>
                             <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', background: 'rgba(0, 0, 0, 0.6)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', zIndex: 10 }}>
-                                {activePresenterId === myPeerId.current ? 'Your Presentation' : 'Active Presentation'}
+                                {activePresenterId === myPeerId.current ? 'Your Presentation' : `${peerNamesRef.current[activePresenterId] || 'Someone'}'s Presentation`}
                             </div>
                         </div>
 
@@ -650,12 +678,14 @@ const MeetingRoom = () => {
                             {/* Local Video as Thumbnail (if not presenting) */}
                             {activePresenterId !== myPeerId.current && (
                                 <VideoTile
+                                    peerId="local"
                                     stream={localStream}
-                                    label="You"
+                                    username={localStorage.getItem('username') || 'You'}
                                     isMuted={isMuted}
                                     isLocal={true}
                                     isActiveSpeaker={activeSpeakerId === 'local'}
                                     transform="scaleX(-1)"
+                                    totalParticipants={totalParticipants}
                                 />
                             )}
                             {/* Remote Peers as Thumbnails */}
@@ -663,11 +693,13 @@ const MeetingRoom = () => {
                                 peer.id !== activePresenterId && (
                                     <VideoTile
                                         key={peer.id}
+                                        peerId={peer.id}
                                         stream={peer.stream}
-                                        label={`Guest ${peer.id.slice(0, 5)}`}
+                                        username={participantNames[peer.id] || 'Guest'}
                                         isMuted={false}
                                         isLocal={false}
                                         isActiveSpeaker={activeSpeakerId === peer.id}
+                                        totalParticipants={totalParticipants}
                                     />
                                 )
                             ))}
@@ -688,24 +720,28 @@ const MeetingRoom = () => {
                     }}>
                         {/* Local Participant */}
                         <VideoTile
+                            peerId="local"
                             stream={localStream}
-                            label="You"
+                            username={localStorage.getItem('username') || 'You'}
                             isMuted={isMuted}
                             isLocal={true}
                             isActiveSpeaker={activeSpeakerId === 'local'}
                             transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
                             maxWidth={totalParticipants === 1 ? '960px' : '100%'}
+                            totalParticipants={totalParticipants}
                         />
 
                         {/* Remote Participants */}
                         {peers.map(peer => (
                             <VideoTile
                                 key={peer.id}
+                                peerId={peer.id}
                                 stream={peer.stream}
-                                label={`Guest ${peer.id.slice(0, 5)}`}
+                                username={participantNames[peer.id] || 'Guest'}
                                 isMuted={false}
                                 isLocal={false}
                                 isActiveSpeaker={activeSpeakerId === peer.id}
+                                totalParticipants={totalParticipants}
                             />
                         ))}
                     </div>
