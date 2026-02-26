@@ -41,6 +41,12 @@ const MeetingRoom = () => {
     };
 
     useEffect(() => {
+        const username = localStorage.getItem('username');
+        if (!username) {
+            navigate(`/join/${room_id}`);
+            return;
+        }
+
         const fetchMeetingAndSetup = async () => {
             try {
                 setLoading(true);
@@ -336,27 +342,59 @@ const MeetingRoom = () => {
         setPeers(prev => prev.filter(p => p.id !== remotePeerId));
     };
 
-    const VideoTile = ({ stream, label, isMuted, isLocal, isActiveSpeaker, transform = 'none' }) => {
+    const getInitials = (name) => {
+        if (!name) return '?';
+        const parts = name.trim().split(' ');
+        if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
+
+    const VideoTile = ({ stream, label, isMuted, isLocal, isActiveSpeaker, transform = 'none', maxWidth = '100%' }) => {
+        const videoTrack = stream?.getVideoTracks()[0];
+        const isVideoDisabled = !videoTrack || !videoTrack.enabled;
+
         return (
             <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
                 position: 'relative',
-                background: '#e5e7eb',
+                background: '#1f2937', // Darker background for video tiles
                 borderRadius: '20px',
                 overflow: 'hidden',
                 boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
                 border: '1px solid #d1d5db',
                 aspectRatio: '16/9',
                 width: '100%',
+                maxWidth: maxWidth,
                 justifySelf: 'center',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
             }}>
-                <video
-                    autoPlay
-                    playsInline
-                    muted={isLocal}
-                    ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
-                />
+                {!isVideoDisabled ? (
+                    <video
+                        autoPlay
+                        playsInline
+                        muted={isLocal}
+                        ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
+                    />
+                ) : (
+                    <div style={{
+                        width: totalParticipants === 1 ? '120px' : '80px',
+                        height: totalParticipants === 1 ? '120px' : '80px',
+                        background: '#374151',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: totalParticipants === 1 ? '3rem' : '2rem',
+                        color: '#fff',
+                        fontWeight: '600'
+                    }}>
+                        {getInitials(label === 'You' ? localStorage.getItem('username') : label)}
+                    </div>
+                )}
+
                 <div style={{
                     position: 'absolute',
                     bottom: '1.25rem',
@@ -370,10 +408,11 @@ const MeetingRoom = () => {
                     fontWeight: '500',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem'
+                    gap: '0.5rem',
+                    zIndex: 10
                 }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isLocal ? '#10b981' : '#3b82f6' }}></div>
-                    {label} {isLocal && '(Host)'} {isMuted && '🎤❌'}
+                    {isLocal ? `${localStorage.getItem('username')} (You)` : label} {isMuted && '🎤❌'}
                 </div>
             </div>
         );
@@ -655,6 +694,7 @@ const MeetingRoom = () => {
                             isLocal={true}
                             isActiveSpeaker={activeSpeakerId === 'local'}
                             transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
+                            maxWidth={totalParticipants === 1 ? '960px' : '100%'}
                         />
 
                         {/* Remote Participants */}

@@ -14,6 +14,7 @@ import TutorDashboard from './pages/TutorDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 
 import MeetingRoom from './pages/MeetingRoom';
+import JoinMeeting from './pages/JoinMeeting';
 
 function App() {
   return (
@@ -55,6 +56,16 @@ function App() {
               element={
                 <ProtectedRoute roles={['student']}>
                   <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Join Screen - Capture username before meeting */}
+            <Route
+              path="/join/:room_id"
+              element={
+                <ProtectedRoute roles={['admin', 'tutor', 'student']}>
+                  <JoinMeeting />
                 </ProtectedRoute>
               }
             />
