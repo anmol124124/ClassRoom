@@ -45,6 +45,14 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
                     if presenter == peer_id:
                         manager.set_presenter(room_id, None)
 
+            # Special handling for "mic-status" to broadcast to room
+            if data.get("type") == "mic-status":
+                await manager.broadcast(room_id, data, sender_id=peer_id)
+
+            # Special handling for "video-status" to broadcast to room
+            if data.get("type") == "video-status":
+                await manager.broadcast(room_id, data, sender_id=peer_id)
+
             # If the message has a specific target, send it only there
             target_id = data.get("target_id")
             if target_id:

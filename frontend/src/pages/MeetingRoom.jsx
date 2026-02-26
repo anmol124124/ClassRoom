@@ -11,9 +11,9 @@ const getInitials = (name) => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
-const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker, transform = 'none', maxWidth = '100%', totalParticipants = 1 }) => {
+const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker, isVideoDisabled: isVideoDisabledProp, transform = 'none', maxWidth = '100%', totalParticipants = 1 }) => {
     const videoTrack = stream?.getVideoTracks()[0];
-    const isVideoDisabled = !videoTrack || !videoTrack.enabled;
+    const isVideoDisabled = isVideoDisabledProp !== undefined ? isVideoDisabledProp : (!videoTrack || !videoTrack.enabled);
     const displayLabel = isLocal ? `${username} (You)` : username;
 
     return (
@@ -62,20 +62,40 @@ const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker
                 position: 'absolute',
                 bottom: '1.25rem',
                 left: '1.25rem',
-                background: 'rgba(0, 0, 0, 0.6)',
-                backdropFilter: 'blur(4px)',
+                background: 'rgba(0, 0, 0, 0.65)',
+                backdropFilter: 'blur(8px)',
                 color: '#fff',
-                padding: '0.5rem 1rem',
-                borderRadius: '10px',
-                fontSize: '0.85rem',
+                padding: '0.6rem 1.2rem',
+                borderRadius: '12px',
+                fontSize: '0.875rem',
                 fontWeight: '500',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
-                zIndex: 10
+                gap: '0.75rem',
+                zIndex: 10,
+                border: '1px solid rgba(255, 255, 255, 0.1)'
             }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isLocal ? '#10b981' : '#3b82f6' }}></div>
-                {displayLabel} {isMuted && '🎤❌'}
+                <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: isLocal ? '#10b981' : '#3b82f6',
+                    boxShadow: `0 0 10px ${isLocal ? '#10b981' : '#3b82f6'}`
+                }}></div>
+                <span style={{ whiteSpace: 'nowrap' }}>{displayLabel}</span>
+                {isMuted && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#ef4444',
+                        padding: '4px',
+                        borderRadius: '6px',
+                        marginLeft: '4px'
+                    }}>
+                        <MicOff size={14} color="#fff" strokeWidth={2.5} />
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -110,6 +130,8 @@ const MeetingRoom = () => {
     const [activePresenterId, setActivePresenterId] = useState(null); // ID of the participant currently sharing screen
     const [activeSpeakerId, setActiveSpeakerId] = useState(null); // ID of the current active speaker
     const [participantNames, setParticipantNames] = useState({}); // UUID -> Name mapping
+    const [mutedPeers, setMutedPeers] = useState({}); // UUID -> boolean mapping
+    const [cameraOffPeers, setCameraOffPeers] = useState({}); // UUID -> boolean mapping
 
     const rtcConfig = {
         iceServers: [
@@ -271,6 +293,14 @@ const MeetingRoom = () => {
                 case 'screen-share':
                     console.log('Screen share update from:', sender_id, data.isSharing);
                     setActivePresenterId(data.isSharing ? sender_id : null);
+                    break;
+                case 'mic-status':
+                    console.log('Mic status update from:', sender_id, data.isMuted);
+                    setMutedPeers(prev => ({ ...prev, [sender_id]: data.isMuted }));
+                    break;
+                case 'video-status':
+                    console.log('Video status update from:', sender_id, data.isVideoOff);
+                    setCameraOffPeers(prev => ({ ...prev, [sender_id]: data.isVideoOff }));
                     break;
                 default:
                     break;
@@ -448,19 +478,39 @@ const MeetingRoom = () => {
 
     const toggleMute = () => {
         if (localStreamRef.current) {
+            const newMuteStatus = !isMuted;
             localStreamRef.current.getAudioTracks().forEach(track => {
-                track.enabled = !track.enabled;
+                track.enabled = !newMuteStatus;
             });
-            setIsMuted(!isMuted);
+            setIsMuted(newMuteStatus);
+
+            // Broadcast mic status change
+            if (socket.current?.readyState === WebSocket.OPEN) {
+                socket.current.send(JSON.stringify({
+                    type: 'mic-status',
+                    userId: myPeerId.current,
+                    isMuted: newMuteStatus
+                }));
+            }
         }
     };
 
     const toggleVideo = () => {
         if (localStreamRef.current) {
+            const newVideoStatus = !isVideoOff;
             localStreamRef.current.getVideoTracks().forEach(track => {
-                track.enabled = !track.enabled;
+                track.enabled = !newVideoStatus;
             });
-            setIsVideoOff(!isVideoOff);
+            setIsVideoOff(newVideoStatus);
+
+            // Broadcast video status change
+            if (socket.current?.readyState === WebSocket.OPEN) {
+                socket.current.send(JSON.stringify({
+                    type: 'video-status',
+                    userId: myPeerId.current,
+                    isVideoOff: newVideoStatus
+                }));
+            }
         }
     };
 
@@ -549,6 +599,15 @@ const MeetingRoom = () => {
         setLocalStream(localStreamRef.current);
         setIsScreenSharing(false);
         setActivePresenterId(null);
+
+        // Broadcast video status restoration (camera back on)
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'video-status',
+                userId: myPeerId.current,
+                isVideoOff: isVideoOff // Use current camera state
+            }));
+        }
 
         // Broadcast screen share stop
         if (socket.current?.readyState === WebSocket.OPEN) {
@@ -696,7 +755,8 @@ const MeetingRoom = () => {
                                         peerId={peer.id}
                                         stream={peer.stream}
                                         username={participantNames[peer.id] || 'Guest'}
-                                        isMuted={false}
+                                        isMuted={mutedPeers[peer.id] || false}
+                                        isVideoDisabled={cameraOffPeers[peer.id]}
                                         isLocal={false}
                                         isActiveSpeaker={activeSpeakerId === peer.id}
                                         totalParticipants={totalParticipants}
@@ -724,6 +784,7 @@ const MeetingRoom = () => {
                             stream={localStream}
                             username={localStorage.getItem('username') || 'You'}
                             isMuted={isMuted}
+                            isVideoDisabled={isVideoOff}
                             isLocal={true}
                             isActiveSpeaker={activeSpeakerId === 'local'}
                             transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
@@ -738,7 +799,8 @@ const MeetingRoom = () => {
                                 peerId={peer.id}
                                 stream={peer.stream}
                                 username={participantNames[peer.id] || 'Guest'}
-                                isMuted={false}
+                                isMuted={mutedPeers[peer.id] || false}
+                                isVideoDisabled={cameraOffPeers[peer.id]}
                                 isLocal={false}
                                 isActiveSpeaker={activeSpeakerId === peer.id}
                                 totalParticipants={totalParticipants}
