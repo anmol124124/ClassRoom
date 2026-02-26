@@ -18,6 +18,7 @@ const MeetingRoom = () => {
     const localStreamRef = useRef(null);
     const screenStreamRef = useRef(null);
     const peerConnections = useRef({}); // { peerId: RTCPeerConnection }
+    const peerNamesRef = useRef({}); // { peerId: username }
     const myPeerId = useRef(null);
     const audioContextRef = useRef(null);
     const analysersRef = useRef({}); // { peerId: { analyser, dataArray } }
@@ -86,12 +87,16 @@ const MeetingRoom = () => {
                 const average = sum / dataArray.length;
 
                 if (average > maxVolume && average > VOLUME_THRESHOLD) {
+                    // Check if it's the local user and they are muted
+                    if (peerId === 'local' && isMuted) return;
+
                     maxVolume = average;
                     currentLoudestId = peerId;
                 }
             });
 
             if (currentLoudestId) {
+                // If it's local, we'll keep using the 'local' string for ID check
                 setActiveSpeakerId(currentLoudestId);
                 if (speakerTimeoutRef.current) clearTimeout(speakerTimeoutRef.current);
                 speakerTimeoutRef.current = setTimeout(() => {
@@ -195,7 +200,7 @@ const MeetingRoom = () => {
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
 
-            analysersRef.current[peerId === 'local' ? myPeerId.current : peerId] = { analyser, dataArray };
+            analysersRef.current[peerId] = { analyser, dataArray };
             console.log(`Started audio analysis for: ${peerId}`);
         } catch (err) {
             console.error('Failed to setup audio analysis:', err);
@@ -329,6 +334,49 @@ const MeetingRoom = () => {
             delete analysersRef.current[remotePeerId];
         }
         setPeers(prev => prev.filter(p => p.id !== remotePeerId));
+    };
+
+    const VideoTile = ({ stream, label, isMuted, isLocal, isActiveSpeaker, transform = 'none' }) => {
+        return (
+            <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
+                position: 'relative',
+                background: '#e5e7eb',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                border: '1px solid #d1d5db',
+                aspectRatio: '16/9',
+                width: '100%',
+                justifySelf: 'center',
+                transition: 'all 0.3s ease'
+            }}>
+                <video
+                    autoPlay
+                    playsInline
+                    muted={isLocal}
+                    ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
+                />
+                <div style={{
+                    position: 'absolute',
+                    bottom: '1.25rem',
+                    left: '1.25rem',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(4px)',
+                    color: '#fff',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '10px',
+                    fontSize: '0.85rem',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isLocal ? '#10b981' : '#3b82f6' }}></div>
+                    {label} {isLocal && '(Host)'} {isMuted && '🎤❌'}
+                </div>
+            </div>
+        );
     };
 
     const toggleMute = () => {
@@ -515,7 +563,7 @@ const MeetingRoom = () => {
                     <div style={{ display: 'flex', width: '100%', height: '100%' }}>
                         {/* Main Stage */}
                         <div style={{ flex: 1, background: '#111827', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                            <div className={activeSpeakerId === activePresenterId ? 'active-speaker' : ''} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '12px', overflow: 'hidden' }}>
+                            <div className={activeSpeakerId === (activePresenterId === myPeerId.current ? 'local' : activePresenterId) ? 'active-speaker' : ''} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '12px', overflow: 'hidden' }}>
                                 <video
                                     autoPlay
                                     playsInline
@@ -562,26 +610,26 @@ const MeetingRoom = () => {
                         }}>
                             {/* Local Video as Thumbnail (if not presenting) */}
                             {activePresenterId !== myPeerId.current && (
-                                <div className={activeSpeakerId === myPeerId.current ? 'active-speaker' : ''} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', aspectRatio: '16/9', background: '#374151', minHeight: '157px' }}>
-                                    <video
-                                        autoPlay playsInline muted
-                                        ref={el => { if (el && el.srcObject !== localStream) el.srcObject = localStream; }}
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-                                    />
-                                    <div style={{ position: 'absolute', bottom: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.5)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>You</div>
-                                </div>
+                                <VideoTile
+                                    stream={localStream}
+                                    label="You"
+                                    isMuted={isMuted}
+                                    isLocal={true}
+                                    isActiveSpeaker={activeSpeakerId === 'local'}
+                                    transform="scaleX(-1)"
+                                />
                             )}
                             {/* Remote Peers as Thumbnails */}
                             {peers.map(peer => (
                                 peer.id !== activePresenterId && (
-                                    <div key={peer.id} className={activeSpeakerId === peer.id ? 'active-speaker' : ''} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', aspectRatio: '16/9', background: '#374151', minHeight: '157px' }}>
-                                        <video
-                                            autoPlay playsInline
-                                            ref={el => { if (el && el.srcObject !== peer.stream) el.srcObject = peer.stream; }}
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        />
-                                        <div style={{ position: 'absolute', bottom: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.5)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>Guest</div>
-                                    </div>
+                                    <VideoTile
+                                        key={peer.id}
+                                        stream={peer.stream}
+                                        label={`Guest ${peer.id.slice(0, 5)}`}
+                                        isMuted={false}
+                                        isLocal={false}
+                                        isActiveSpeaker={activeSpeakerId === peer.id}
+                                    />
                                 )
                             ))}
                         </div>
@@ -600,54 +648,25 @@ const MeetingRoom = () => {
                         alignItems: 'center'
                     }}>
                         {/* Local Participant */}
-                        <div key="local-video" className={activeSpeakerId === myPeerId.current ? 'active-speaker' : ''} style={{
-                            position: 'relative',
-                            background: '#e5e7eb',
-                            borderRadius: '20px',
-                            overflow: 'hidden',
-                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                            border: '1px solid #d1d5db',
-                            aspectRatio: '16/9',
-                            maxWidth: totalParticipants === 1 ? '960px' : '100%',
-                            width: '100%',
-                            justifySelf: 'center'
-                        }}>
-                            <video
-                                autoPlay
-                                playsInline
-                                muted
-                                ref={el => { if (el && el.srcObject !== localStream) el.srcObject = localStream; }}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: isScreenSharing ? 'none' : 'scaleX(-1)' }}
-                            />
-                            <div style={{ position: 'absolute', bottom: '1.25rem', left: '1.25rem', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
-                                You (Host) {isMuted && '🎤❌'} {isVideoOff && '📷❌'}
-                            </div>
-                        </div>
+                        <VideoTile
+                            stream={localStream}
+                            label="You"
+                            isMuted={isMuted}
+                            isLocal={true}
+                            isActiveSpeaker={activeSpeakerId === 'local'}
+                            transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
+                        />
 
                         {/* Remote Participants */}
                         {peers.map(peer => (
-                            <div key={peer.id} className={activeSpeakerId === peer.id ? 'active-speaker' : ''} style={{
-                                position: 'relative',
-                                background: '#e5e7eb',
-                                borderRadius: '20px',
-                                overflow: 'hidden',
-                                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                                border: '1px solid #d1d5db',
-                                aspectRatio: '16/9',
-                                width: '100%',
-                                justifySelf: 'center'
-                            }}>
-                                <video
-                                    autoPlay
-                                    playsInline
-                                    ref={el => { if (el && el.srcObject !== peer.stream) el.srcObject = peer.stream; }}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                                <div style={{ position: 'absolute', bottom: '1.25rem', left: '1.25rem', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '500' }}>
-                                    Guest {peer.id.slice(0, 5)}
-                                </div>
-                            </div>
+                            <VideoTile
+                                key={peer.id}
+                                stream={peer.stream}
+                                label={`Guest ${peer.id.slice(0, 5)}`}
+                                isMuted={false}
+                                isLocal={false}
+                                isActiveSpeaker={activeSpeakerId === peer.id}
+                            />
                         ))}
                     </div>
                 )}
