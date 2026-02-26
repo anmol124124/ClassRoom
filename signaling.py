@@ -30,14 +30,15 @@ class ConnectionManager:
         
         return peer_id
 
-    def update_username(self, room_id: str, peer_id: str, username: str):
+    def update_user_info(self, room_id: str, peer_id: str, username: str, role: str = "student"):
         if room_id in self.rooms and peer_id in self.rooms[room_id]["peers"]:
             self.rooms[room_id]["peers"][peer_id]["username"] = username
+            self.rooms[room_id]["peers"][peer_id]["role"] = role
 
     def get_participants(self, room_id: str):
         if room_id in self.rooms:
             participants = [
-                {"userId": pid, "username": info["username"]}
+                {"userId": pid, "username": info["username"], "role": info.get("role", "student")}
                 for pid, info in self.rooms[room_id]["peers"].items()
             ]
             return participants, self.rooms[room_id].get("presenter")
@@ -79,5 +80,18 @@ class ConnectionManager:
                         await info["socket"].send_json(message)
                     except Exception:
                         pass
+
+    async def kick_user(self, room_id: str, target_id: str):
+        if room_id in self.rooms and target_id in self.rooms[room_id]["peers"]:
+            info = self.rooms[room_id]["peers"][target_id]
+            try:
+                await info["socket"].send_json({
+                    "type": "kicked",
+                    "message": "You were removed by the host"
+                })
+                await info["socket"].close()
+            except Exception:
+                pass
+            self.disconnect(room_id, target_id)
 
 manager = ConnectionManager()

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
 import useScreenRecorder from '../hooks/useScreenRecorder';
 import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send } from 'lucide-react';
 
@@ -121,6 +122,7 @@ const VideoTile = ({ peerId, stream, username, isMuted, isHandRaised, isLocal, i
 };
 
 const MeetingRoom = () => {
+    const { user: authUser } = useAuth();
     const { room_id } = useParams();
     const navigate = useNavigate();
     const [meeting, setMeeting] = useState(null);
@@ -159,6 +161,7 @@ const MeetingRoom = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [unreadCount, setUnreadCount] = useState(0);
+    const [myRole, setMyRole] = useState('student');
     const prevPeersLengthRef = useRef(0);
     const chatEndRef = useRef(null);
 
@@ -171,6 +174,10 @@ const MeetingRoom = () => {
 
     useEffect(() => {
         const username = localStorage.getItem('username');
+        const email = authUser?.email || '';
+        const role = (email === 'admin@gmail.com' || authUser?.role === 'admin') ? 'admin' : 'student';
+        setMyRole(role);
+
         if (!username) {
             navigate(`/join/${room_id}`);
             return;
@@ -254,7 +261,7 @@ const MeetingRoom = () => {
                 localStreamRef.current.getTracks().forEach(track => track.stop());
             }
         };
-    }, [room_id]);
+    }, [room_id, authUser]);
 
     const setupSignaling = (roomId, stream) => {
         // Use the environment variable for the signaling server URL
@@ -276,12 +283,16 @@ const MeetingRoom = () => {
                 case 'init':
                     myPeerId.current = peer_id;
                     console.log('Assigned Peer ID:', peer_id);
+                    const email = authUser?.email || '';
+                    const role = (email === 'admin@gmail.com' || authUser?.role === 'admin') ? 'admin' : 'student';
                     // Immediately send joining info with our username
                     socket.current.send(JSON.stringify({
                         type: 'join',
                         roomId: room_id,
                         userId: peer_id,
-                        username: localStorage.getItem('username') || 'Guest'
+                        username: localStorage.getItem('username') || 'Guest',
+                        email: email,
+                        role: role
                     }));
                     break;
                 case 'participants':
@@ -356,6 +367,17 @@ const MeetingRoom = () => {
                 case 'chat-history':
                     console.log('Received chat history:', data.history);
                     setChatMessages(data.history);
+                    break;
+                case 'kicked':
+                    alert(data.message || 'You were removed by the host');
+                    window.location.href = '/';
+                    break;
+                case 'user-kicked-notification':
+                    setToast({
+                        message: data.message,
+                        id: Date.now()
+                    });
+                    setTimeout(() => setToast(null), 4000);
                     break;
                 default:
                     break;
@@ -564,6 +586,18 @@ const MeetingRoom = () => {
         if (nextState) {
             setShowParticipants(false); // Mutually exclusive
             setUnreadCount(0); // Reset unread count when opening
+        }
+    };
+
+    const handleRemoveParticipant = (targetUserId) => {
+        if (myRole !== 'admin') return;
+
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'kick-user',
+                targetUserId: targetUserId,
+                roomId: room_id
+            }));
         }
     };
 
@@ -1011,10 +1045,32 @@ const MeetingRoom = () => {
                                         </div>
                                         <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Participant</div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                                         {raisedHands[peer.id] && <Hand size={14} color="#fbbf24" fill="#fbbf24" />}
                                         {activePresenterId === peer.id && <MonitorUp size={14} color="#3b82f6" />}
                                         {mutedPeers[peer.id] ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#10b981" />}
+
+                                        {myRole === 'admin' && (
+                                            <button
+                                                onClick={() => handleRemoveParticipant(peer.id)}
+                                                style={{
+                                                    background: '#fee2e2',
+                                                    border: 'none',
+                                                    color: '#ef4444',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: '600',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    marginLeft: '4px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.background = '#fecaca'}
+                                                onMouseLeave={(e) => e.target.style.background = '#fee2e2'}
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}

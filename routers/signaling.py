@@ -19,7 +19,8 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
             # Special handling for "join" to update username and sync state
             if data.get("type") == "join":
                 username = data.get("username", "Guest")
-                manager.update_username(room_id, peer_id, username)
+                role = data.get("role", "student")
+                manager.update_user_info(room_id, peer_id, username, role)
                 
                 # Broadcast the updated participant list and active presenter to everyone in the room
                 users, presenter = manager.get_participants(room_id)
@@ -58,6 +59,30 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
             elif data.get("type") == "chat-message":
                 manager.add_message(room_id, data)
                 await manager.broadcast(room_id, data)
+                continue
+
+            # Special handling for "kick-user" (ADMIN ONLY)
+            elif data.get("type") == "kick-user":
+                sender_info = manager.rooms.get(room_id, {}).get("peers", {}).get(peer_id, {})
+                if sender_info.get("role") == "admin":
+                    target_id = data.get("targetUserId")
+                    target_username = manager.rooms.get(room_id, {}).get("peers", {}).get(target_id, {}).get("username", "Unknown")
+                    await manager.kick_user(room_id, target_id)
+                    
+                    # Broadcast removal toast to others
+                    await manager.broadcast(room_id, {
+                        "type": "user-kicked-notification",
+                        "username": target_username,
+                        "message": f"{target_username} was removed by admin"
+                    })
+                    
+                    # Broadcast updated participant list
+                    users, presenter = manager.get_participants(room_id)
+                    await manager.broadcast(room_id, {
+                        "type": "participants",
+                        "users": users,
+                        "presenter": presenter
+                    })
                 continue
 
             # Special handling for "mic-status", "video-status", "raise-hand"
