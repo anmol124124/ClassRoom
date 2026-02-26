@@ -1,6 +1,6 @@
 import React from 'react';
 // React Router hooks
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 // Custom hook to access authentication data
 import { useAuth } from '../context/AuthContext';
 
@@ -9,6 +9,8 @@ const Navbar = () => {
     const { user, logout } = useAuth();
     // Hook to navigate to different pages programmatically
     const navigate = useNavigate();
+    // Hook to get current path
+    const location = useLocation();
 
     // Function to handle logout button click
     const handleLogout = () => {
@@ -16,8 +18,8 @@ const Navbar = () => {
         navigate('/login');  // Go back to login page
     };
 
-    // Don't show navbar if user is not logged in
-    if (!user) return null;
+    // Don't show navbar if user is not logged in OR if we are on the login page
+    if (!user || location.pathname === '/login') return null;
 
     return (
         <nav className="navbar">

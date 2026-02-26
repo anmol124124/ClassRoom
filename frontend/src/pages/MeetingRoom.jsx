@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import useScreenRecorder from '../hooks/useScreenRecorder';
-import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X } from 'lucide-react';
 
 const getInitials = (name) => {
     if (!name) return '?';
@@ -11,7 +11,7 @@ const getInitials = (name) => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
-const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker, isVideoDisabled: isVideoDisabledProp, transform = 'none', maxWidth = '100%', totalParticipants = 1 }) => {
+const VideoTile = ({ peerId, stream, username, isMuted, isHandRaised, isLocal, isActiveSpeaker, isVideoDisabled: isVideoDisabledProp, transform = 'none', maxWidth = '100%', totalParticipants = 1 }) => {
     const videoTrack = stream?.getVideoTracks()[0];
     const isVideoDisabled = isVideoDisabledProp !== undefined ? isVideoDisabledProp : (!videoTrack || !videoTrack.enabled);
     const displayLabel = isLocal ? `${username} (You)` : username;
@@ -55,6 +55,25 @@ const VideoTile = ({ peerId, stream, username, isMuted, isLocal, isActiveSpeaker
                     fontWeight: '600'
                 }}>
                     {getInitials(username)}
+                </div>
+            )}
+
+            {isHandRaised && (
+                <div style={{
+                    position: 'absolute',
+                    top: '1.25rem',
+                    right: '1.25rem',
+                    background: '#fbbf24',
+                    padding: '8px',
+                    borderRadius: '50%',
+                    color: '#000',
+                    boxShadow: '0 4px 12px rgba(251, 191, 36, 0.4)',
+                    zIndex: 15,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <Hand size={20} fill="currentColor" />
                 </div>
             )}
 
@@ -132,6 +151,11 @@ const MeetingRoom = () => {
     const [participantNames, setParticipantNames] = useState({}); // UUID -> Name mapping
     const [mutedPeers, setMutedPeers] = useState({}); // UUID -> boolean mapping
     const [cameraOffPeers, setCameraOffPeers] = useState({}); // UUID -> boolean mapping
+    const [isHandRaised, setIsHandRaised] = useState(false);
+    const [raisedHands, setRaisedHands] = useState({}); // UUID -> boolean mapping
+    const [toast, setToast] = useState(null); // { message, id }
+    const [showParticipants, setShowParticipants] = useState(false);
+    const prevPeersLengthRef = useRef(0);
 
     const rtcConfig = {
         iceServers: [
@@ -301,6 +325,17 @@ const MeetingRoom = () => {
                 case 'video-status':
                     console.log('Video status update from:', sender_id, data.isVideoOff);
                     setCameraOffPeers(prev => ({ ...prev, [sender_id]: data.isVideoOff }));
+                    break;
+                case 'raise-hand':
+                    console.log('Hand raise update from:', sender_id, data.isRaised);
+                    setRaisedHands(prev => ({ ...prev, [sender_id]: data.isRaised }));
+                    if (data.isRaised) {
+                        setToast({
+                            message: `${peerNamesRef.current[sender_id] || 'Someone'} raised their hand ✋`,
+                            id: Date.now()
+                        });
+                        setTimeout(() => setToast(null), 4000);
+                    }
                     break;
                 default:
                     break;
@@ -476,6 +511,20 @@ const MeetingRoom = () => {
     };
 
 
+    // Sound effects for join/leave
+    useEffect(() => {
+        if (peers.length > prevPeersLengthRef.current) {
+            // New participant joined
+            const audio = new Audio('/sounds/join.mp3');
+            audio.play().catch(e => console.log('Sound play error:', e));
+        } else if (peers.length < prevPeersLengthRef.current) {
+            // Participant left
+            const audio = new Audio('/sounds/leave.mp3');
+            audio.play().catch(e => console.log('Sound play error:', e));
+        }
+        prevPeersLengthRef.current = peers.length;
+    }, [peers]);
+
     const toggleMute = () => {
         if (localStreamRef.current) {
             const newMuteStatus = !isMuted;
@@ -511,6 +560,20 @@ const MeetingRoom = () => {
                     isVideoOff: newVideoStatus
                 }));
             }
+        }
+    };
+
+    const toggleHandRaise = () => {
+        const newStatus = !isHandRaised;
+        setIsHandRaised(newStatus);
+
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'raise-hand',
+                userId: myPeerId.current,
+                username: localStorage.getItem('username'),
+                isRaised: newStatus
+            }));
         }
     };
 
@@ -675,139 +738,222 @@ const MeetingRoom = () => {
                 </div>
             )}
 
-            {/* Video Main Area */}
-            <div style={{
-                flex: 1,
-                display: 'flex',
-                background: '#f3f4f6',
-                overflow: 'hidden',
-                padding: activePresenterId ? '0' : '2rem',
-                position: 'relative'
-            }}>
-                {activePresenterId ? (
-                    // Presentation Layout (Zoom Mode)
-                    <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-                        {/* Main Stage */}
-                        <div style={{ flex: 1, background: '#111827', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                            <div className={activeSpeakerId === (activePresenterId === myPeerId.current ? 'local' : activePresenterId) ? 'active-speaker' : ''} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '12px', overflow: 'hidden' }}>
-                                <video
-                                    autoPlay
-                                    playsInline
-                                    muted={activePresenterId === myPeerId.current}
-                                    ref={el => {
-                                        if (el) {
-                                            let targetStream = null;
-                                            if (activePresenterId === myPeerId.current) {
-                                                targetStream = localStream;
-                                            } else {
-                                                const presenter = peers.find(p => p.id === activePresenterId);
-                                                if (presenter) targetStream = presenter.stream;
+            {/* Video Main Area + Sidebar Container */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    background: '#f3f4f6',
+                    overflow: 'hidden',
+                    padding: activePresenterId ? '0' : '2rem',
+                    position: 'relative',
+                    transition: 'all 0.3s ease'
+                }}>
+                    {activePresenterId ? (
+                        // Presentation Layout (Zoom Mode)
+                        <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                            {/* Main Stage */}
+                            <div style={{ flex: 1, background: '#111827', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                <div className={activeSpeakerId === (activePresenterId === myPeerId.current ? 'local' : activePresenterId) ? 'active-speaker' : ''} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '12px', overflow: 'hidden' }}>
+                                    <video
+                                        autoPlay
+                                        playsInline
+                                        muted={activePresenterId === myPeerId.current}
+                                        ref={el => {
+                                            if (el) {
+                                                let targetStream = null;
+                                                if (activePresenterId === myPeerId.current) {
+                                                    targetStream = localStream;
+                                                } else {
+                                                    const presenter = peers.find(p => p.id === activePresenterId);
+                                                    if (presenter) targetStream = presenter.stream;
+                                                }
+                                                if (el.srcObject !== targetStream) {
+                                                    el.srcObject = targetStream;
+                                                }
                                             }
-                                            if (el.srcObject !== targetStream) {
-                                                el.srcObject = targetStream;
-                                            }
-                                        }
-                                    }}
-                                    style={{
-                                        maxWidth: '100%',
-                                        maxHeight: '100%',
-                                        width: 'auto',
-                                        height: 'auto',
-                                        objectFit: 'contain',
-                                        transform: activePresenterId === myPeerId.current && !isScreenSharing ? 'scaleX(-1)' : 'none'
-                                    }}
-                                />
+                                        }}
+                                        style={{
+                                            maxWidth: '100%',
+                                            maxHeight: '100%',
+                                            width: 'auto',
+                                            height: 'auto',
+                                            objectFit: 'contain',
+                                            transform: activePresenterId === myPeerId.current && !isScreenSharing ? 'scaleX(-1)' : 'none'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', background: 'rgba(0, 0, 0, 0.6)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', zIndex: 10 }}>
+                                    {activePresenterId === myPeerId.current ? 'Your Presentation' : `${peerNamesRef.current[activePresenterId] || 'Someone'}'s Presentation`}
+                                </div>
                             </div>
-                            <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem', background: 'rgba(0, 0, 0, 0.6)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', zIndex: 10 }}>
-                                {activePresenterId === myPeerId.current ? 'Your Presentation' : `${peerNamesRef.current[activePresenterId] || 'Someone'}'s Presentation`}
-                            </div>
-                        </div>
 
-                        {/* Sidebar Thumbnails */}
-                        <div style={{
-                            width: '280px',
-                            background: '#1f2937',
-                            borderLeft: '1px solid #374151',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '1rem',
-                            padding: '1rem',
-                            overflowY: 'auto'
-                        }}>
-                            {/* Local Video as Thumbnail (if not presenting) */}
-                            {activePresenterId !== myPeerId.current && (
-                                <VideoTile
-                                    peerId="local"
-                                    stream={localStream}
-                                    username={localStorage.getItem('username') || 'You'}
-                                    isMuted={isMuted}
-                                    isLocal={true}
-                                    isActiveSpeaker={activeSpeakerId === 'local'}
-                                    transform="scaleX(-1)"
-                                    totalParticipants={totalParticipants}
-                                />
-                            )}
-                            {/* Remote Peers as Thumbnails */}
-                            {peers.map(peer => (
-                                peer.id !== activePresenterId && (
+                            {/* Sidebar Thumbnails */}
+                            <div style={{
+                                width: '280px',
+                                background: '#1f2937',
+                                borderLeft: '1px solid #374151',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '1rem',
+                                padding: '1rem',
+                                overflowY: 'auto'
+                            }}>
+                                {/* Local Video as Thumbnail (if not presenting) */}
+                                {activePresenterId !== myPeerId.current && (
                                     <VideoTile
-                                        key={peer.id}
-                                        peerId={peer.id}
-                                        stream={peer.stream}
-                                        username={participantNames[peer.id] || 'Guest'}
-                                        isMuted={mutedPeers[peer.id] || false}
-                                        isVideoDisabled={cameraOffPeers[peer.id]}
-                                        isLocal={false}
-                                        isActiveSpeaker={activeSpeakerId === peer.id}
+                                        peerId="local"
+                                        stream={localStream}
+                                        username={localStorage.getItem('username') || 'You'}
+                                        isMuted={isMuted}
+                                        isVideoDisabled={isVideoOff}
+                                        isHandRaised={isHandRaised}
+                                        isLocal={true}
+                                        isActiveSpeaker={activeSpeakerId === 'local'}
+                                        transform="scaleX(-1)"
                                         totalParticipants={totalParticipants}
                                     />
-                                )
+                                )}
+                                {/* Remote Peers as Thumbnails */}
+                                {peers.map(peer => (
+                                    peer.id !== activePresenterId && (
+                                        <VideoTile
+                                            key={peer.id}
+                                            peerId={peer.id}
+                                            stream={peer.stream}
+                                            username={participantNames[peer.id] || 'Guest'}
+                                            isMuted={mutedPeers[peer.id] || false}
+                                            isVideoDisabled={cameraOffPeers[peer.id]}
+                                            isHandRaised={raisedHands[peer.id]}
+                                            isLocal={false}
+                                            isActiveSpeaker={activeSpeakerId === peer.id}
+                                            totalParticipants={totalParticipants}
+                                        />
+                                    )
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        // Regular Grid Layout
+                        <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'grid',
+                            gridTemplateColumns: gridCols,
+                            gridAutoRows: 'auto',
+                            gap: '1.5rem',
+                            justifyContent: 'center',
+                            alignContent: 'center',
+                            alignItems: 'center'
+                        }}>
+                            {/* Local Participant */}
+                            <VideoTile
+                                peerId="local"
+                                stream={localStream}
+                                username={localStorage.getItem('username') || 'You'}
+                                isMuted={isMuted}
+                                isVideoDisabled={isVideoOff}
+                                isHandRaised={isHandRaised}
+                                isLocal={true}
+                                isActiveSpeaker={activeSpeakerId === 'local'}
+                                transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
+                                maxWidth={totalParticipants === 1 ? '960px' : '100%'}
+                                totalParticipants={totalParticipants}
+                            />
+
+                            {/* Remote Participants */}
+                            {peers.map(peer => (
+                                <VideoTile
+                                    key={peer.id}
+                                    peerId={peer.id}
+                                    stream={peer.stream}
+                                    username={participantNames[peer.id] || 'Guest'}
+                                    isMuted={mutedPeers[peer.id] || false}
+                                    isVideoDisabled={cameraOffPeers[peer.id]}
+                                    isHandRaised={raisedHands[peer.id]}
+                                    isLocal={false}
+                                    isActiveSpeaker={activeSpeakerId === peer.id}
+                                    totalParticipants={totalParticipants}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Participant List Side Panel */}
+                <aside style={{
+                    width: showParticipants ? '320px' : '0',
+                    background: '#fff',
+                    borderLeft: '1px solid #e5e7eb',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    overflow: 'hidden',
+                    boxShadow: showParticipants ? '-10px 0 25px rgba(0,0,0,0.05)' : 'none',
+                    zIndex: 25
+                }}>
+                    <div style={{ minWidth: '320px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <h2 style={{ fontSize: '1.1rem', fontWeight: '600', margin: 0, color: '#111827' }}>Participants ({totalParticipants})</h2>
+                            <button onClick={() => setShowParticipants(false)} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+                            {/* Local User Row */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.8rem 1rem', borderRadius: '12px',
+                                background: '#f8fafc', marginBottom: '0.5rem', border: '1px solid #f1f5f9'
+                            }}>
+                                <div style={{
+                                    width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.85rem'
+                                }}>
+                                    {getInitials(localStorage.getItem('username'))}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {localStorage.getItem('username')} (You)
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Meeting Host</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                    {isHandRaised && <Hand size={14} color="#fbbf24" fill="#fbbf24" />}
+                                    {isScreenSharing && <MonitorUp size={14} color="#3b82f6" />}
+                                    {isMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#10b981" />}
+                                </div>
+                            </div>
+
+                            {/* Remote Peers Rows */}
+                            {peers.map(peer => (
+                                <div key={peer.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.8rem 1rem', borderRadius: '12px',
+                                    marginBottom: '0.25rem', transition: 'background 0.2s'
+                                }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                    <div style={{
+                                        width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.85rem'
+                                    }}>
+                                        {getInitials(participantNames[peer.id] || 'Guest')}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {participantNames[peer.id] || 'Guest'}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Participant</div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                        {raisedHands[peer.id] && <Hand size={14} color="#fbbf24" fill="#fbbf24" />}
+                                        {activePresenterId === peer.id && <MonitorUp size={14} color="#3b82f6" />}
+                                        {mutedPeers[peer.id] ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#10b981" />}
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     </div>
-                ) : (
-                    // Regular Grid Layout
-                    <div style={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'grid',
-                        gridTemplateColumns: gridCols,
-                        gridAutoRows: 'auto',
-                        gap: '1.5rem',
-                        justifyContent: 'center',
-                        alignContent: 'center',
-                        alignItems: 'center'
-                    }}>
-                        {/* Local Participant */}
-                        <VideoTile
-                            peerId="local"
-                            stream={localStream}
-                            username={localStorage.getItem('username') || 'You'}
-                            isMuted={isMuted}
-                            isVideoDisabled={isVideoOff}
-                            isLocal={true}
-                            isActiveSpeaker={activeSpeakerId === 'local'}
-                            transform={isScreenSharing ? 'none' : 'scaleX(-1)'}
-                            maxWidth={totalParticipants === 1 ? '960px' : '100%'}
-                            totalParticipants={totalParticipants}
-                        />
-
-                        {/* Remote Participants */}
-                        {peers.map(peer => (
-                            <VideoTile
-                                key={peer.id}
-                                peerId={peer.id}
-                                stream={peer.stream}
-                                username={participantNames[peer.id] || 'Guest'}
-                                isMuted={mutedPeers[peer.id] || false}
-                                isVideoDisabled={cameraOffPeers[peer.id]}
-                                isLocal={false}
-                                isActiveSpeaker={activeSpeakerId === peer.id}
-                                totalParticipants={totalParticipants}
-                            />
-                        ))}
-                    </div>
-                )}
+                </aside>
             </div>
 
             {/* Controls Bar */}
@@ -889,6 +1035,50 @@ const MeetingRoom = () => {
                     <MonitorUp size={24} />
                 </button>
 
+                {/* Show Participants Toggle */}
+                <button
+                    onClick={() => setShowParticipants(!showParticipants)}
+                    style={{
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: showParticipants ? '#10b981' : '#f1f5f9', color: showParticipants ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
+                        position: 'relative'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
+                    title="Participant List"
+                >
+                    <Users size={24} />
+                    {totalParticipants > 1 && (
+                        <div style={{
+                            position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff',
+                            width: '20px', height: '20px', borderRadius: '50%', fontSize: '0.7rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff'
+                        }}>
+                            {totalParticipants}
+                        </div>
+                    )}
+                </button>
+
+                {/* Raise Hand Button */}
+                <button
+                    onClick={toggleHandRaise}
+                    style={{
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isHandRaised ? '#fbbf24' : '#f1f5f9', color: isHandRaised ? '#000' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
+                    title={isHandRaised ? 'Lower Hand' : 'Raise Hand'}
+                >
+                    <Hand size={24} fill={isHandRaised ? 'currentColor' : 'none'} />
+                </button>
+
                 <button
                     onClick={leaveMeeting}
                     style={{
@@ -906,6 +1096,37 @@ const MeetingRoom = () => {
                     Leave Room
                 </button>
             </footer>
+
+            {/* Notification Toast */}
+            {toast && (
+                <div style={{
+                    position: 'fixed',
+                    top: '2rem',
+                    right: '2rem',
+                    background: '#1f2937',
+                    color: '#fff',
+                    padding: '1rem 1.5rem',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    zIndex: 100,
+                    animation: 'slideIn 0.3s ease-out',
+                    border: '1px solid #374151'
+                }}>
+                    <div style={{ background: '#fbbf24', padding: '6px', borderRadius: '50%', color: '#000' }}>
+                        <Hand size={16} fill="currentColor" />
+                    </div>
+                    <span>{toast.message}</span>
+                </div>
+            )}
+            <style>{`
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            `}</style>
         </div>
     );
 };

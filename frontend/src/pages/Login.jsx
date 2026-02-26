@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // React Router for navigation
 import { useNavigate, useLocation } from 'react-router-dom';
 // Custom auth hook
@@ -17,6 +17,14 @@ const Login = () => {
     const navigate = useNavigate();
     // Get location info (used to redirect to intended page after login)
     const location = useLocation();
+
+    // Auto-redirect if user is already logged in
+    useEffect(() => {
+        const currentUser = JSON.parse(localStorage.getItem('user'));
+        if (currentUser) {
+            navigate(`/${currentUser.role}`, { replace: true });
+        }
+    }, [navigate]);
 
     // Handle form submission when user clicks "Sign In"
     const handleSubmit = async (e) => {
