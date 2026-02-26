@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import useScreenRecorder from '../hooks/useScreenRecorder';
-import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send } from 'lucide-react';
 
 const getInitials = (name) => {
     if (!name) return '?';
@@ -155,7 +155,12 @@ const MeetingRoom = () => {
     const [raisedHands, setRaisedHands] = useState({}); // UUID -> boolean mapping
     const [toast, setToast] = useState(null); // { message, id }
     const [showParticipants, setShowParticipants] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [chatInput, setChatInput] = useState('');
+    const [unreadCount, setUnreadCount] = useState(0);
     const prevPeersLengthRef = useRef(0);
+    const chatEndRef = useRef(null);
 
     const rtcConfig = {
         iceServers: [
@@ -335,6 +340,17 @@ const MeetingRoom = () => {
                             id: Date.now()
                         });
                         setTimeout(() => setToast(null), 4000);
+                    }
+                    break;
+                case 'chat-message':
+                    console.log('Received chat message:', data);
+                    setChatMessages(prev => [...prev, data]);
+                    if (!isChatOpen) {
+                        setUnreadCount(count => count + 1);
+                        // Play notification sound for others' messages
+                        if (data.userId !== myPeerId.current) {
+                            new Audio('/sounds/message.mp3').play().catch(() => { });
+                        }
                     }
                     break;
                 default:
@@ -524,6 +540,52 @@ const MeetingRoom = () => {
         }
         prevPeersLengthRef.current = peers.length;
     }, [peers]);
+
+    // Auto-scroll chat to bottom
+    useEffect(() => {
+        if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [chatMessages, isChatOpen]);
+
+    const toggleParticipants = () => {
+        const nextState = !showParticipants;
+        setShowParticipants(nextState);
+        if (nextState) setIsChatOpen(false); // Mutually exclusive
+    };
+
+    const toggleChat = () => {
+        const nextState = !isChatOpen;
+        setIsChatOpen(nextState);
+        if (nextState) {
+            setShowParticipants(false); // Mutually exclusive
+            setUnreadCount(0); // Reset unread count when opening
+        }
+    };
+
+    const handleSendMessage = (e) => {
+        if (e) e.preventDefault();
+        if (!chatInput.trim()) return;
+
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'chat-message',
+                roomId: room_id,
+                userId: myPeerId.current,
+                username: localStorage.getItem('username') || 'Guest',
+                message: chatInput,
+                timestamp: Date.now()
+            }));
+            setChatInput('');
+        }
+    };
+
+    const handleChatKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    };
 
     const toggleMute = () => {
         if (localStreamRef.current) {
@@ -734,7 +796,7 @@ const MeetingRoom = () => {
                     <MonitorUp size={18} />
                     {activePresenterId === myPeerId.current
                         ? 'You are presenting your screen'
-                        : `Someone is presenting their screen`}
+                        : `${peerNamesRef.current[activePresenterId] || 'Someone'}'s Presentation`}
                 </div>
             )}
 
@@ -890,7 +952,8 @@ const MeetingRoom = () => {
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     overflow: 'hidden',
                     boxShadow: showParticipants ? '-10px 0 25px rgba(0,0,0,0.05)' : 'none',
-                    zIndex: 25
+                    zIndex: 25,
+                    transform: showParticipants ? 'translateX(0)' : 'translateX(100%)'
                 }}>
                     <div style={{ minWidth: '320px', height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '1.5rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -952,6 +1015,112 @@ const MeetingRoom = () => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </aside>
+
+                {/* Chat Side Panel */}
+                <aside style={{
+                    width: isChatOpen ? '320px' : '0',
+                    background: '#fff',
+                    borderLeft: '1px solid #e5e7eb',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    overflow: 'hidden',
+                    boxShadow: isChatOpen ? '-10px 0 25px rgba(0,0,0,0.05)' : 'none',
+                    zIndex: 25,
+                    transform: isChatOpen ? 'translateX(0)' : 'translateX(100%)'
+                }}>
+                    <div style={{ minWidth: '320px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <h2 style={{ fontSize: '1.1rem', fontWeight: '600', margin: 0, color: '#111827' }}>Meeting Chat</h2>
+                            <button onClick={() => setIsChatOpen(false)} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {chatMessages.map((msg, idx) => {
+                                const isMe = msg.userId === myPeerId.current;
+                                return (
+                                    <div key={idx} style={{
+                                        alignSelf: isMe ? 'flex-end' : 'flex-start',
+                                        maxWidth: '85%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: isMe ? 'flex-end' : 'flex-start'
+                                    }}>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '0.2rem', padding: '0 0.4rem' }}>
+                                            {isMe ? 'You' : msg.username} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                        <div style={{
+                                            padding: '0.75rem 1rem',
+                                            borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                                            background: isMe ? '#3b82f6' : '#f1f5f9',
+                                            color: isMe ? '#fff' : '#1e293b',
+                                            fontSize: '0.875rem',
+                                            lineHeight: '1.4',
+                                            boxShadow: isMe ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none',
+                                            wordBreak: 'break-word',
+                                            whiteSpace: 'pre-wrap'
+                                        }}>
+                                            {msg.message}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={chatEndRef} />
+                        </div>
+
+                        <form onSubmit={handleSendMessage} style={{ padding: '1.25rem', borderTop: '1px solid #f3f4f6', background: '#fff' }}>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <textarea
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={handleChatKeyDown}
+                                    placeholder="Send a message..."
+                                    rows="1"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 3.5rem 0.75rem 1rem',
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
+                                        background: '#f8fafc',
+                                        fontSize: '0.875rem',
+                                        outline: 'none',
+                                        transition: 'border-color 0.2s',
+                                        resize: 'none',
+                                        minHeight: '42px',
+                                        maxHeight: '120px',
+                                        fontFamily: 'inherit'
+                                    }}
+                                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                                    onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                                />
+                                <button
+                                    type="submit"
+                                    style={{
+                                        position: 'absolute',
+                                        right: '6px',
+                                        bottom: '6px',
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: chatInput.trim() ? '#3b82f6' : '#cbd5e1',
+                                        color: '#fff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: chatInput.trim() ? 'pointer' : 'default',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    disabled={!chatInput.trim()}
+                                >
+                                    <Send size={16} />
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </aside>
             </div>
@@ -1037,7 +1206,7 @@ const MeetingRoom = () => {
 
                 {/* Show Participants Toggle */}
                 <button
-                    onClick={() => setShowParticipants(!showParticipants)}
+                    onClick={toggleParticipants}
                     style={{
                         width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
                         background: showParticipants ? '#10b981' : '#f1f5f9', color: showParticipants ? '#fff' : '#475569',
@@ -1051,13 +1220,32 @@ const MeetingRoom = () => {
                     title="Participant List"
                 >
                     <Users size={24} />
-                    {totalParticipants > 1 && (
+                </button>
+
+                {/* Show Chat Toggle */}
+                <button
+                    onClick={toggleChat}
+                    style={{
+                        width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                        background: isChatOpen ? '#10b981' : '#f1f5f9', color: isChatOpen ? '#fff' : '#475569',
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        outline: 'none',
+                        position: 'relative'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; }}
+                    title="Meeting Chat"
+                >
+                    <MessageSquare size={24} />
+                    {unreadCount > 0 && !isChatOpen && (
                         <div style={{
                             position: 'absolute', top: -2, right: -2, background: '#ef4444', color: '#fff',
                             width: '20px', height: '20px', borderRadius: '50%', fontSize: '0.7rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff'
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff',
+                            fontWeight: 'bold', animation: 'bounce 0.5s infinite alternate'
                         }}>
-                            {totalParticipants}
+                            {unreadCount}
                         </div>
                     )}
                 </button>

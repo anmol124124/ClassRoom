@@ -35,7 +35,7 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
                     "sender_id": peer_id,
                     "username": username
                 }, sender_id=peer_id)
-
+                continue
             # Special handling for "screen-share" to track the presenter
             if data.get("type") == "screen-share":
                 if data.get("isSharing"):
@@ -44,25 +44,23 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
                     users, presenter = manager.get_participants(room_id)
                     if presenter == peer_id:
                         manager.set_presenter(room_id, None)
+                continue
 
-            # Special handling for "mic-status" to broadcast to room
-            if data.get("type") == "mic-status":
-                await manager.broadcast(room_id, data, sender_id=peer_id)
+            # Special handling for "chat-message" to broadcast to room (including sender)
+            elif data.get("type") == "chat-message":
+                await manager.broadcast(room_id, data)
+                continue
 
-            # Special handling for "video-status" to broadcast to room
-            if data.get("type") == "video-status":
-                await manager.broadcast(room_id, data, sender_id=peer_id)
+            # Special handling for "mic-status", "video-status", "raise-hand"
+            # These are now handled by the default broadcast logic below, 
+            # so we don't need separate blocks that cause duplication.
 
-            # Special handling for "raise-hand" to broadcast to room
-            if data.get("type") == "raise-hand":
-                await manager.broadcast(room_id, data, sender_id=peer_id)
-
-            # If the message has a specific target, send it only there
+            # If the bit is for a specific target, send it only there
             target_id = data.get("target_id")
             if target_id:
                 await manager.send_to_target(room_id, target_id, data)
             else:
-                # Otherwise broadcast to everyone else
+                # Otherwise broadcast to everyone else (default behavior)
                 await manager.broadcast(room_id, data, sender_id=peer_id)
             
     except WebSocketDisconnect:
