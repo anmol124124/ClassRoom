@@ -35,6 +35,14 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
                     "sender_id": peer_id,
                     "username": username
                 }, sender_id=peer_id)
+
+                # Send chat history to the newly joined participant
+                history = manager.get_messages(room_id)
+                if history:
+                    await websocket.send_json({
+                        "type": "chat-history",
+                        "history": history
+                    })
                 continue
             # Special handling for "screen-share" to track the presenter
             if data.get("type") == "screen-share":
@@ -48,6 +56,7 @@ async def websocket_signaling(websocket: WebSocket, room_id: str):
 
             # Special handling for "chat-message" to broadcast to room (including sender)
             elif data.get("type") == "chat-message":
+                manager.add_message(room_id, data)
                 await manager.broadcast(room_id, data)
                 continue
 

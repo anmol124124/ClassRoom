@@ -14,7 +14,7 @@ class ConnectionManager:
         peer_id = str(uuid.uuid4())
         
         if room_id not in self.rooms:
-            self.rooms[room_id] = {"peers": {}, "presenter": None}
+            self.rooms[room_id] = {"peers": {}, "presenter": None, "messages": []}
         
         # Initial storage with default Guest name
         self.rooms[room_id]["peers"][peer_id] = {
@@ -46,6 +46,15 @@ class ConnectionManager:
     def set_presenter(self, room_id: str, peer_id: str):
         if room_id in self.rooms:
             self.rooms[room_id]["presenter"] = peer_id
+
+    def add_message(self, room_id: str, message: dict):
+        if room_id in self.rooms:
+            self.rooms[room_id]["messages"].append(message)
+
+    def get_messages(self, room_id: str):
+        if room_id in self.rooms:
+            return self.rooms[room_id]["messages"]
+        return []
 
     def disconnect(self, room_id: str, peer_id: str):
         if room_id in self.rooms and peer_id in self.rooms[room_id]["peers"]:

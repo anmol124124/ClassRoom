@@ -353,6 +353,10 @@ const MeetingRoom = () => {
                         }
                     }
                     break;
+                case 'chat-history':
+                    console.log('Received chat history:', data.history);
+                    setChatMessages(data.history);
+                    break;
                 default:
                     break;
             }
