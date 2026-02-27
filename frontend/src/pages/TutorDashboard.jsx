@@ -198,7 +198,7 @@ const TutorDashboard = () => {
                                 ))}
                                 {meetings.length === 0 && (
                                     <tr>
-                                        <td colSpan="4" className="text-center">No meetings scheduled.</td>
+                                        <td colSpan="5" className="text-center">No meetings scheduled.</td>
                                     </tr>
                                 )}
                             </tbody>

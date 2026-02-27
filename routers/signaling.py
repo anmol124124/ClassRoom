@@ -1,116 +1,253 @@
+# Import tools to create WebSocket routes and handle disconnects
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+# Import the connection manager that handles rooms & users
 from signaling import manager
 
+# Create a router for websocket endpoints
 router = APIRouter(
-    prefix="/ws",
-    tags=["signaling"]
+    prefix="/ws",          # All websocket URLs will start with /ws
+    tags=["signaling"]     # Group name shown in docs
 )
 
+# WebSocket endpoint for a specific meeting room
 @router.websocket("/{room_id}")
 async def websocket_signaling(websocket: WebSocket, room_id: str):
-    peer_id = await manager.connect(room_id, websocket)
+
+    # Connect the user to the room and get a temporary peer ID
+    temp_peer_id = await manager.connect(room_id, websocket)
+    stable_peer_id = temp_peer_id # we'll update this once 'join' is received
+
     try:
+        # Keep listening for messages forever while connected
         while True:
+
+            # Receive message from frontend in JSON format
             data = await websocket.receive_json()
             
-            # Attach the sender's ID to the message
-            data["sender_id"] = peer_id
+            # Add sender ID so others know who sent the message
+            data["sender_id"] = stable_peer_id
             
-            # Special handling for "join" to update username and sync state
+            # ========== WHEN USER JOINS ==========
             if data.get("type") == "join":
                 username = data.get("username", "Guest")
                 role = data.get("role", "student")
-                manager.update_user_info(room_id, peer_id, username, role)
+                user_id = data.get("userId") or temp_peer_id # Use stable ID from frontend if provided
                 
-                # Broadcast the updated participant list and active presenter to everyone in the room
-                users, presenter = manager.get_participants(room_id)
-                await manager.broadcast(room_id, {
-                    "type": "participants",
-                    "users": users,
-                    "presenter": presenter
-                })
+                # Update our tracking ID to the stable one
+                stable_peer_id = user_id
+                data["sender_id"] = stable_peer_id
 
-                # Also broadcast the "join" message so existing participants know to initiate a call
-                await manager.broadcast(room_id, {
-                    "type": "join",
-                    "sender_id": peer_id,
-                    "username": username
-                }, sender_id=peer_id)
-
-                # Send chat history to the newly joined participant
-                history = manager.get_messages(room_id)
-                if history:
+                # CHECK IF ALREADY APPROVED (Seamless Re-join)
+                # If they were already in 'peers', they don't need to wait again
+                is_already_approved = room_id in manager.rooms and user_id in manager.rooms[room_id]["peers"]
+                
+                # IF STUDENT -> Move to Waiting Room (unless already approved)
+                if role == "student" and not is_already_approved:
+                    await manager.move_to_waiting(room_id, user_id, websocket, username, role)
+                    
+                    # Notify admins in the room
+                    await manager.broadcast(room_id, {
+                        "type": "join-request",
+                        "userId": user_id,
+                        "username": username
+                    }, only_admins=True)
+                    
+                    # Tell student they are waiting
                     await websocket.send_json({
-                        "type": "chat-history",
-                        "history": history
+                        "type": "waiting-for-approval"
                     })
-                continue
-            # Special handling for "screen-share" to track the presenter
-            if data.get("type") == "screen-share":
-                if data.get("isSharing"):
-                    manager.set_presenter(room_id, peer_id)
+                
+                # IF ADMIN OR ALREADY APPROVED -> Join normally
                 else:
+                    await manager.add_to_peers(room_id, user_id, websocket, username, role)
+                    
+                    # Get updated participant list & presenter
                     users, presenter = manager.get_participants(room_id)
-                    if presenter == peer_id:
-                        manager.set_presenter(room_id, None)
+
+                    # Send updated participants list to everyone approved
+                    await manager.broadcast(room_id, {
+                        "type": "participants",
+                        "users": users,
+                        "presenter": presenter
+                    })
+
+                    # Tell other approved peers someone joined
+                    await manager.broadcast(room_id, {
+                        "type": "join",
+                        "sender_id": user_id,
+                        "username": username
+                    }, sender_id=user_id)
+
+                    history = manager.get_messages(room_id)
+                    if history:
+                        await websocket.send_json({
+                            "type": "chat-history",
+                            "history": history
+                        })
+                    
+                    # IF ADMIN -> Also send the current waiting room list
+                    if role == "admin":
+                        waiting_users = manager.get_waiting_users(room_id)
+                        if waiting_users:
+                            await websocket.send_json({
+                                "type": "waiting-users-list",
+                                "users": waiting_users
+                            })
+
                 continue
 
-            # Special handling for "chat-message" to broadcast to room (including sender)
-            elif data.get("type") == "chat-message":
-                manager.add_message(room_id, data)
-                await manager.broadcast(room_id, data)
-                continue
-
-            # Special handling for "kick-user" (ADMIN ONLY)
-            elif data.get("type") == "kick-user":
-                sender_info = manager.rooms.get(room_id, {}).get("peers", {}).get(peer_id, {})
+            # ========== ADMIN APPROVE USER ==========
+            if data.get("type") == "approve-user":
+                sender_info = manager.rooms.get(room_id, {}).get("peers", {}).get(stable_peer_id, {})
                 if sender_info.get("role") == "admin":
                     target_id = data.get("targetUserId")
+                    waiting_user = manager.rooms.get(room_id, {}).get("waiting", {}).get(target_id)
+                    
+                    if waiting_user:
+                        # Move from waiting to peers
+                        target_socket = waiting_user["socket"]
+                        target_username = waiting_user["username"]
+                        target_role = waiting_user["role"]
+                        
+                        manager.disconnect(room_id, target_id) # Remove from waiting
+                        await manager.add_to_peers(room_id, target_id, target_socket, target_username, target_role)
+                        
+                        # Notify the student
+                        await target_socket.send_json({
+                            "type": "join-approved"
+                        })
+                        
+                        # Broadcast updated participants
+                        users, presenter = manager.get_participants(room_id)
+                        await manager.broadcast(room_id, {
+                            "type": "participants",
+                            "users": users,
+                            "presenter": presenter
+                        })
+
+                        # Notify others to start WebRTC
+                        await manager.broadcast(room_id, {
+                            "type": "join",
+                            "sender_id": target_id,
+                            "username": target_username
+                        }, sender_id=target_id)
+                        
+                        # Send chat history to approved user
+                        history = manager.get_messages(room_id)
+                        if history:
+                            await target_socket.send_json({
+                                "type": "chat-history",
+                                "history": history
+                            })
+                continue
+
+            # ========== ADMIN REJECT USER ==========
+            if data.get("type") == "reject-user":
+                sender_info = manager.rooms.get(room_id, {}).get("peers", {}).get(stable_peer_id, {})
+                if sender_info.get("role") == "admin":
+                    target_id = data.get("targetUserId")
+                    await manager.kick_user(room_id, target_id)
+                continue
+
+            # ========== SCREEN SHARE EVENT ==========
+            if data.get("type") == "screen-share":
+
+                # If user started sharing screen
+                if data.get("isSharing"):
+                    manager.set_presenter(room_id, stable_peer_id)
+
+                # If user stopped sharing
+                else:
+                    users, presenter = manager.get_participants(room_id)
+
+                    # Remove presenter if this user was presenting
+                    if presenter == stable_peer_id:
+                        manager.set_presenter(room_id, None)
+
+                continue
+
+            # ========== CHAT MESSAGE ==========
+            elif data.get("type") == "chat-message":
+
+                # Save message to history
+                manager.add_message(room_id, data)
+
+                # Send message to everyone in the room
+                await manager.broadcast(room_id, data)
+
+                continue
+
+            # ========== ADMIN KICK USER ==========
+            elif data.get("type") == "kick-user":
+
+                # Get info about sender
+                sender_info = manager.rooms.get(room_id, {}).get("peers", {}).get(stable_peer_id, {})
+
+                # Only admin can kick users
+                if sender_info.get("role") == "admin":
+
+                    # ID of user to remove
+                    target_id = data.get("targetUserId")
+
+                    # Get username of removed user
                     target_username = manager.rooms.get(room_id, {}).get("peers", {}).get(target_id, {}).get("username", "Unknown")
+
+                    # Remove user from room
                     await manager.kick_user(room_id, target_id)
                     
-                    # Broadcast removal toast to others
+                    # Notify others that user was removed
                     await manager.broadcast(room_id, {
                         "type": "user-kicked-notification",
                         "username": target_username,
                         "message": f"{target_username} was removed by admin"
                     })
                     
-                    # Broadcast updated participant list
+                    # Send updated participants list
                     users, presenter = manager.get_participants(room_id)
                     await manager.broadcast(room_id, {
                         "type": "participants",
                         "users": users,
                         "presenter": presenter
                     })
+
                 continue
 
-            # Special handling for "mic-status", "video-status", "raise-hand"
-            # These are now handled by the default broadcast logic below, 
-            # so we don't need separate blocks that cause duplication.
-
-            # If the bit is for a specific target, send it only there
+            # ========== PRIVATE MESSAGE (WebRTC signaling) ==========
+            # If message has a target user → send only to them
             target_id = data.get("target_id")
+
             if target_id:
                 await manager.send_to_target(room_id, target_id, data)
+
             else:
-                # Otherwise broadcast to everyone else (default behavior)
-                await manager.broadcast(room_id, data, sender_id=peer_id)
+                # Otherwise send to everyone except sender
+                await manager.broadcast(room_id, data, sender_id=stable_peer_id)
             
+    # ========== USER DISCONNECTED ==========
     except WebSocketDisconnect:
-        manager.disconnect(room_id, peer_id)
-        # Broadcast the updated participant list after someone leaves
+
+        # Remove user from room
+        manager.disconnect(room_id, stable_peer_id, websocket)
+
+        # Get updated participants
         users, presenter = manager.get_participants(room_id)
+
+        # Notify everyone about new participant list
         await manager.broadcast(room_id, {
             "type": "participants",
             "users": users,
             "presenter": presenter
         })
+
+        # Notify that user left
         await manager.broadcast(room_id, {
             "type": "leave",
-            "sender_id": peer_id,
-            "message": f"User {peer_id} has left the room"
+            "sender_id": stable_peer_id,
+            "message": f"User {stable_peer_id} has left the room"
         })
+
+    # ========== HANDLE ERRORS ==========
     except Exception as e:
-        print(f"WebSocket error: {e}")
-        manager.disconnect(room_id, peer_id)
+        print(f"WebSocket error: {e}")   # print error in console
+        manager.disconnect(room_id, stable_peer_id, websocket)  # safely remove user

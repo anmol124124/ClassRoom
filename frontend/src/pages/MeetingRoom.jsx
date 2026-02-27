@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import useScreenRecorder from '../hooks/useScreenRecorder';
-import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send, Image as ImageIcon, Upload, Settings, Check } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send, Image as ImageIcon, Upload, Settings, Check, XCircle, CheckCircle, ShieldAlert } from 'lucide-react';
 import { BackgroundProcessor } from '../utils/BackgroundProcessor';
 
 
@@ -22,104 +22,107 @@ const VideoTile = ({ peerId, stream, username, isMuted, isHandRaised, isLocal, i
     const displayLabel = isLocal ? `${username} (You)` : username;
 
     return (
-        <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
-            position: 'relative',
-            background: '#1f2937',
-            borderRadius: '20px',
-            overflow: 'hidden',
-            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-            border: '1px solid #d1d5db',
-            aspectRatio: '16/9',
-            width: '100%',
-            maxWidth: maxWidth,
-            justifySelf: 'center',
-            transition: 'all 0.3s ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-        }}>
-            {!isVideoDisabled ? (
-                <video
-                    autoPlay
-                    playsInline
-                    muted={isLocal}
-                    ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
-                />
-            ) : (
-                <div style={{
-                    width: totalParticipants === 1 ? '120px' : '80px',
-                    height: totalParticipants === 1 ? '120px' : '80px',
-                    background: '#374151',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: totalParticipants === 1 ? '3rem' : '2rem',
-                    color: '#fff',
-                    fontWeight: '600'
-                }}>
-                    {getInitials(username)}
-                </div>
-            )}
-
-            {isHandRaised && (
-                <div style={{
-                    position: 'absolute',
-                    top: '1.25rem',
-                    right: '1.25rem',
-                    background: '#fbbf24',
-                    padding: '8px',
-                    borderRadius: '50%',
-                    color: '#000',
-                    boxShadow: '0 4px 12px rgba(251, 191, 36, 0.4)',
-                    zIndex: 15,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}>
-                    <Hand size={20} fill="currentColor" />
-                </div>
-            )}
-
-            <div style={{
-                position: 'absolute',
-                bottom: '1.25rem',
-                left: '1.25rem',
-                background: 'rgba(0, 0, 0, 0.65)',
-                backdropFilter: 'blur(8px)',
-                color: '#fff',
-                padding: '0.6rem 1.2rem',
-                borderRadius: '12px',
-                fontSize: '0.875rem',
-                fontWeight: '500',
+        <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minWidth: 0, minHeight: 0 }}>
+            <div className={isActiveSpeaker ? 'active-speaker' : ''} style={{
+                position: 'relative',
+                background: '#1f2937',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                border: '1px solid #d1d5db',
+                aspectRatio: '16/9',
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                transition: 'all 0.3s ease',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.75rem',
-                zIndex: 10,
-                border: '1px solid rgba(255, 255, 255, 0.1)'
+                justifyContent: 'center'
             }}>
-                <div style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    background: isLocal ? '#10b981' : '#3b82f6',
-                    boxShadow: `0 0 10px ${isLocal ? '#10b981' : '#3b82f6'}`
-                }}></div>
-                <span style={{ whiteSpace: 'nowrap' }}>{displayLabel}</span>
-                {isMuted && (
+                {!isVideoDisabled ? (
+                    <video
+                        autoPlay
+                        playsInline
+                        muted={isLocal}
+                        ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', transform }}
+                    />
+                ) : (
                     <div style={{
+                        width: totalParticipants === 1 ? '120px' : '80px',
+                        height: totalParticipants === 1 ? '120px' : '80px',
+                        background: '#374151',
+                        borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: '#ef4444',
-                        padding: '4px',
-                        borderRadius: '6px',
-                        marginLeft: '4px'
+                        fontSize: totalParticipants === 1 ? '3rem' : '2rem',
+                        color: '#fff',
+                        fontWeight: '600'
                     }}>
-                        <MicOff size={14} color="#fff" strokeWidth={2.5} />
+                        {getInitials(username)}
                     </div>
                 )}
+
+                {isHandRaised && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '1.25rem',
+                        right: '1.25rem',
+                        background: '#fbbf24',
+                        padding: '8px',
+                        borderRadius: '50%',
+                        color: '#000',
+                        boxShadow: '0 4px 12px rgba(251, 191, 36, 0.4)',
+                        zIndex: 15,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <Hand size={20} fill="currentColor" />
+                    </div>
+                )}
+
+                <div style={{
+                    position: 'absolute',
+                    bottom: '1.25rem',
+                    left: '1.25rem',
+                    background: 'rgba(0, 0, 0, 0.65)',
+                    backdropFilter: 'blur(8px)',
+                    color: '#fff',
+                    padding: '0.6rem 1.2rem',
+                    borderRadius: '12px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    zIndex: 10,
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                    <div style={{
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        background: isLocal ? '#10b981' : '#3b82f6',
+                        boxShadow: `0 0 10px ${isLocal ? '#10b981' : '#3b82f6'}`
+                    }}></div>
+                    <span style={{ whiteSpace: 'nowrap' }}>{displayLabel}</span>
+                    {isMuted && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#ef4444',
+                            padding: '4px',
+                            borderRadius: '6px',
+                            marginLeft: '4px'
+                        }}>
+                            <MicOff size={14} color="#fff" strokeWidth={2.5} />
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -166,6 +169,11 @@ const MeetingRoom = () => {
     const [chatInput, setChatInput] = useState('');
     const [unreadCount, setUnreadCount] = useState(0);
     const [myRole, setMyRole] = useState('student');
+    const [isWaiting, setIsWaiting] = useState(false);
+    const [isRejected, setIsRejected] = useState(false);
+    const [rejectedReason, setRejectedReason] = useState(null); // 'session-replaced', 'denied'
+    const [joinRequests, setJoinRequests] = useState([]);
+    const [showJoinRequests, setShowJoinRequests] = useState(false);
     const prevPeersLengthRef = useRef(0);
     const chatEndRef = useRef(null);
 
@@ -175,6 +183,66 @@ const MeetingRoom = () => {
     const [showBgSettings, setShowBgSettings] = useState(false);
     const backgroundProcessorRef = useRef(null);
     const backgroundVideoRef = useRef(null); // Hidden video element for background processing
+
+    const removePeer = (remotePeerId) => {
+        console.log('Removing peer:', remotePeerId);
+        const pc = peerConnections.current[remotePeerId];
+        if (pc) {
+            pc.ontrack = null;
+            pc.onicecandidate = null;
+            pc.onconnectionstatechange = null;
+            pc.onnegotiationneeded = null;
+            pc.close();
+            delete peerConnections.current[remotePeerId];
+        }
+        if (analysersRef.current[remotePeerId]) {
+            delete analysersRef.current[remotePeerId];
+        }
+        setPeers(prev => prev.filter(p => p.id !== remotePeerId));
+    };
+
+    const cleanupAllSessions = () => {
+        console.log('Performing deep cleanup of all sessions and media...');
+
+        // Stop all peer connections
+        if (peerConnections.current) {
+            Object.keys(peerConnections.current).forEach(peerId => {
+                removePeer(peerId);
+            });
+        }
+
+        // Close socket
+        if (socket.current) {
+            socket.current.close();
+        }
+
+        // Stop camera/mic tracks
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => {
+                track.stop();
+                console.log(`Stopped local track: ${track.kind}`);
+            });
+            localStreamRef.current = null;
+        }
+
+        // Stop screen share tracks
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(track => {
+                track.stop();
+                console.log(`Stopped screen track: ${track.kind}`);
+            });
+            screenStreamRef.current = null;
+        }
+
+        // Cleanup hidden video element
+        if (backgroundVideoRef.current) {
+            backgroundVideoRef.current.srcObject = null;
+            if (backgroundVideoRef.current.parentNode) {
+                backgroundVideoRef.current.parentNode.removeChild(backgroundVideoRef.current);
+            }
+            backgroundVideoRef.current = null;
+        }
+    };
 
 
 
@@ -291,20 +359,7 @@ const MeetingRoom = () => {
         return () => {
             clearInterval(detectionInterval);
             if (speakerTimeoutRef.current) clearTimeout(speakerTimeoutRef.current);
-            // Cleanup all peer connections and media
-            Object.keys(peerConnections.current).forEach(peerId => {
-                removePeer(peerId);
-            });
-            if (socket.current) {
-                socket.current.close();
-            }
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (backgroundVideoRef.current) {
-                backgroundVideoRef.current.srcObject = null;
-                backgroundVideoRef.current.remove();
-            }
+            cleanupAllSessions();
         };
 
     }, [room_id, authUser]);
@@ -328,16 +383,20 @@ const MeetingRoom = () => {
             switch (type) {
                 case 'init':
                     myPeerId.current = peer_id;
-                    console.log('Assigned Peer ID:', peer_id);
+                    console.log('Temporary Peer ID:', peer_id);
                     const email = authUser?.email || '';
                     const role = (email === 'admin@gmail.com' || authUser?.role === 'admin') ? 'admin' : 'student';
-                    // Immediately send joining info with our username
+
+                    // We use email as the stable userId for session enforcement
+                    const stableUserId = email || peer_id;
+                    myPeerId.current = stableUserId;
+
+                    // Immediately send joining info
                     socket.current.send(JSON.stringify({
                         type: 'join',
                         roomId: room_id,
-                        userId: peer_id,
+                        userId: stableUserId,
                         username: localStorage.getItem('username') || 'Guest',
-                        email: email,
                         role: role
                     }));
                     break;
@@ -352,11 +411,29 @@ const MeetingRoom = () => {
                         newNames[u.userId] = u.username;
                     });
                     setParticipantNames(newNames);
+
+                    // Sync join requests and toast: if someone is now a participant, they are no longer waiting
+                    setJoinRequests(prev => {
+                        const filtered = prev.filter(r => !data.users.some(u => u.userId === r.userId));
+                        return filtered;
+                    });
+
+                    setToast(prev => {
+                        if (prev?.type === 'join-request' && data.users.some(u => u.userId === prev.targetUserId)) {
+                            return null;
+                        }
+                        return prev;
+                    });
+
                     // Trigger re-render to update names on tiles
                     setPeers(prev => [...prev]);
                     break;
                 case 'join':
                     console.log('New participant joined:', sender_id);
+                    // Clear join request and toast for this user if they just joined (already approved)
+                    setJoinRequests(prev => prev.filter(r => r.userId !== sender_id));
+                    setToast(prev => (prev?.targetUserId === sender_id ? null : prev));
+
                     // Initiate offer to the new participant
                     createPeerConnection(sender_id, true);
                     break;
@@ -374,6 +451,11 @@ const MeetingRoom = () => {
                 case 'leave':
                     console.log('Participant left:', sender_id);
                     if (activePresenterId === sender_id) setActivePresenterId(null);
+
+                    // Clear join request and toast if they left while waiting
+                    setJoinRequests(prev => prev.filter(r => r.userId !== sender_id));
+                    setToast(prev => (prev?.targetUserId === sender_id ? null : prev));
+
                     removePeer(sender_id);
                     break;
                 case 'screen-share':
@@ -415,8 +497,15 @@ const MeetingRoom = () => {
                     setChatMessages(data.history);
                     break;
                 case 'kicked':
-                    alert(data.message || 'You were removed by the host');
-                    window.location.href = '/';
+                    if (data.reason === 'session-replaced') {
+                        console.warn('Session replaced by another tab. Cleaning up media...');
+                        cleanupAllSessions();
+                        setIsRejected(true);
+                        setRejectedReason('session-replaced');
+                    } else {
+                        alert(data.message || 'You were removed by the host');
+                        window.location.href = '/';
+                    }
                     break;
                 case 'user-kicked-notification':
                     setToast({
@@ -424,6 +513,36 @@ const MeetingRoom = () => {
                         id: Date.now()
                     });
                     setTimeout(() => setToast(null), 4000);
+                    break;
+                case 'waiting-for-approval':
+                    console.log('Moved to waiting room');
+                    setIsWaiting(true);
+                    break;
+                case 'join-request':
+                    console.log('Incoming join request:', data);
+                    setJoinRequests(prev => {
+                        if (prev.find(r => r.userId === data.userId)) return prev;
+                        return [...prev, { userId: data.userId, username: data.username }];
+                    });
+                    setToast({
+                        message: `${data.username} wants to join`,
+                        id: Date.now(),
+                        type: 'join-request',
+                        targetUserId: data.userId
+                    });
+                    break;
+                case 'join-approved':
+                    console.log('Join approved!');
+                    setIsWaiting(false);
+                    // Now that we are approved, we can initialize WebRTC by being notified of participants
+                    break;
+                case 'join-rejected':
+                    console.log('Join rejected');
+                    setIsRejected(true);
+                    break;
+                case 'waiting-users-list':
+                    console.log('Received waiting users list:', data.users);
+                    setJoinRequests(data.users);
                     break;
                 default:
                     break;
@@ -581,22 +700,6 @@ const MeetingRoom = () => {
         }
     };
 
-    const removePeer = (remotePeerId) => {
-        console.log('Removing peer:', remotePeerId);
-        const pc = peerConnections.current[remotePeerId];
-        if (pc) {
-            pc.ontrack = null;
-            pc.onicecandidate = null;
-            pc.onconnectionstatechange = null;
-            pc.onnegotiationneeded = null;
-            pc.close();
-            delete peerConnections.current[remotePeerId];
-        }
-        if (analysersRef.current[remotePeerId]) {
-            delete analysersRef.current[remotePeerId];
-        }
-        setPeers(prev => prev.filter(p => p.id !== remotePeerId));
-    };
 
 
     // Sound effects for join/leave
@@ -727,14 +830,34 @@ const MeetingRoom = () => {
     const toggleHandRaise = () => {
         const newStatus = !isHandRaised;
         setIsHandRaised(newStatus);
-
         if (socket.current?.readyState === WebSocket.OPEN) {
             socket.current.send(JSON.stringify({
                 type: 'raise-hand',
                 userId: myPeerId.current,
-                username: localStorage.getItem('username'),
                 isRaised: newStatus
             }));
+        }
+    };
+
+    const approveUser = (targetUserId) => {
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'approve-user',
+                targetUserId
+            }));
+            setJoinRequests(prev => prev.filter(r => r.userId !== targetUserId));
+            setToast(prev => (prev?.targetUserId === targetUserId ? null : prev));
+        }
+    };
+
+    const rejectUser = (targetUserId) => {
+        if (socket.current?.readyState === WebSocket.OPEN) {
+            socket.current.send(JSON.stringify({
+                type: 'reject-user',
+                targetUserId
+            }));
+            setJoinRequests(prev => prev.filter(r => r.userId !== targetUserId));
+            setToast(prev => (prev?.targetUserId === targetUserId ? null : prev));
         }
     };
 
@@ -945,8 +1068,79 @@ const MeetingRoom = () => {
         </div>
     );
 
+    if (isRejected) {
+        const isSessionReplaced = rejectedReason === 'session-replaced';
+        return (
+            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#111827', color: '#fff', textAlign: 'center', padding: '2rem' }}>
+                <div style={{ background: isSessionReplaced ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)', padding: '2.5rem', borderRadius: '32px', border: `1px solid ${isSessionReplaced ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, maxWidth: '450px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                    <div style={{ marginBottom: '2rem', color: isSessionReplaced ? '#3b82f6' : '#ef4444' }}>
+                        {isSessionReplaced ? <MonitorUp size={80} /> : <XCircle size={80} />}
+                    </div>
+                    <h2 style={{ fontSize: '2.25rem', fontWeight: '800', marginBottom: '1rem', color: '#fff' }}>
+                        {isSessionReplaced ? 'Another Session Active' : 'Entry Denied'}
+                    </h2>
+                    <p style={{ color: '#9ca3af', marginBottom: '2.5rem', fontSize: '1.125rem', lineHeight: '1.6' }}>
+                        {isSessionReplaced
+                            ? "You've joined this meeting from another tab or device. To maintain security, only one connection is allowed at a time."
+                            : "Your request to join this meeting was declined by the host."}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <button
+                            onClick={() => window.location.reload()}
+                            style={{ background: '#3b82f6', color: '#fff', padding: '1rem 2.5rem', borderRadius: '14px', fontWeight: '700', border: 'none', cursor: 'pointer', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.5)' }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                        >
+                            {isSessionReplaced ? 'Reconnect This Tab' : 'Try Again'}
+                        </button>
+                        <button
+                            onClick={() => window.location.href = '/'}
+                            style={{ background: 'transparent', color: '#9ca3af', padding: '0.75rem', borderRadius: '14px', fontWeight: '600', border: '1px solid #374151', cursor: 'pointer', fontSize: '0.875rem' }}
+                        >
+                            Return to Dashboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (isWaiting) {
+        return (
+            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#111827', color: '#fff', textAlign: 'center', padding: '2rem' }}>
+                <div style={{ position: 'relative' }}>
+                    <div style={{ width: '120px', height: '120px', borderRadius: '50%', border: '4px solid #3b82f6', borderTopColor: 'transparent', animation: 'spin 1.5s linear infinite', marginBottom: '2rem' }}></div>
+                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', marginTop: '-1rem' }}>
+                        <Users size={40} color="#3b82f6" />
+                    </div>
+                </div>
+                <h2 style={{ fontSize: '2.25rem', fontWeight: '800', marginBottom: '1rem', background: 'linear-gradient(to right, #60a5fa, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Waiting for Approval</h2>
+                <p style={{ color: '#9ca3af', fontSize: '1.125rem', maxWidth: '500px', lineHeight: '1.6' }}>
+                    The meeting host has been notified. Please stay on this page while we wait for them to let you in.
+                </p>
+                <div style={{ marginTop: '3rem', padding: '1rem 2rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }}></div>
+                    <span style={{ color: '#60a5fa', fontWeight: '500' }}>Securely connecting to room...</span>
+                </div>
+                <style>{`
+                    @keyframes spin { to { transform: rotate(360deg); } }
+                    @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+                `}</style>
+            </div>
+        );
+    }
+
     const totalParticipants = peers.length + 1;
-    const gridCols = totalParticipants === 1 ? '1fr' : totalParticipants <= 4 ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(300px, 1fr))';
+    let gridCols, gridRows;
+    if (totalParticipants === 1) {
+        gridCols = '1fr';
+        gridRows = '1fr';
+    } else {
+        const nCols = Math.ceil(Math.sqrt(totalParticipants));
+        const nRows = Math.ceil(totalParticipants / nCols);
+        gridCols = `repeat(${nCols}, 1fr)`;
+        gridRows = `repeat(${nRows}, minmax(0, 1fr))`;
+    }
 
     return (
         <div className="meeting-room-container" style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f3f4f6', color: 'var(--text-main)', fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -967,8 +1161,50 @@ const MeetingRoom = () => {
                         <Users size={16} />
                         {totalParticipants} Online
                     </div>
+                    {myRole === 'admin' && joinRequests.length > 0 && (
+                        <button
+                            onClick={() => setShowJoinRequests(!showJoinRequests)}
+                            style={{ position: 'relative', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.5rem 1rem', borderRadius: '30px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                        >
+                            <ShieldAlert size={16} />
+                            {joinRequests.length} Requests
+                            <span style={{ position: 'absolute', top: -5, right: -5, width: '12px', height: '12px', background: '#ef4444', borderRadius: '50%', border: '2px solid #fff' }}></span>
+                        </button>
+                    )}
                 </div>
             </header>
+
+            {/* Admin Approval Sidebar/Modal */}
+            {showJoinRequests && myRole === 'admin' && (
+                <div style={{ position: 'fixed', top: '100px', right: '2.5rem', width: '320px', background: '#fff', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', border: '1px solid #e5e7eb', zIndex: 100, overflow: 'hidden', animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+                    <div style={{ padding: '1.25rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#111827' }}>Pending Requests</h3>
+                        <button onClick={() => setShowJoinRequests(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}><X size={20} /></button>
+                    </div>
+                    <div style={{ maxHeight: '400px', overflowY: 'auto', padding: '0.75rem' }}>
+                        {joinRequests.length === 0 ? (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>No pending requests</div>
+                        ) : (
+                            joinRequests.map(request => (
+                                <div key={request.userId} style={{ padding: '1rem', background: '#f9fafb', borderRadius: '16px', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <div style={{ width: '40px', height: '40px', background: '#3b82f6', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{getInitials(request.username)}</div>
+                                        <div style={{ fontWeight: '600', color: '#111827' }}>{request.username}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={() => approveUser(request.userId)} style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', padding: '0.6rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            <Check size={16} /> Approve
+                                        </button>
+                                        <button onClick={() => rejectUser(request.userId)} style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '0.6rem', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            <X size={16} /> Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Presentation Banner */}
             {activePresenterId && (
@@ -1095,11 +1331,11 @@ const MeetingRoom = () => {
                             height: '100%',
                             display: 'grid',
                             gridTemplateColumns: gridCols,
-                            gridAutoRows: 'auto',
-                            gap: '1.5rem',
+                            gridTemplateRows: gridRows,
+                            gap: '1rem',
                             justifyContent: 'center',
-                            alignContent: 'center',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            overflow: 'hidden'
                         }}>
                             {/* Local Participant */}
                             <VideoTile
@@ -1664,6 +1900,11 @@ const MeetingRoom = () => {
                 @keyframes bounce {
                     from { transform: translateY(0); }
                     to { transform: translateY(-3px); }
+                }
+
+                .active-speaker {
+                    box-shadow: 0 0 0 4px #10b981 !important;
+                    border-color: #10b981 !important;
                 }
             `}</style>
 

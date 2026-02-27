@@ -288,28 +288,28 @@ const AdminDashboard = () => {
                                             </button>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button
-                                                    className="btn-primary"
-                                                    onClick={() => navigate(`/meeting/${meeting.room_id}`)}
-                                                    style={{ padding: '0.4rem 1rem' }}
-                                                >
-                                                    Join
-                                                </button>
-                                                <button
-                                                    className="btn-delete"
-                                                    onClick={() => handleDeleteMeeting(meeting.id)}
-                                                    style={{ padding: '0.4rem 1rem' }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
+                                            <button
+                                                className="btn-primary"
+                                                onClick={() => navigate(`/meeting/${meeting.room_id}`)}
+                                                style={{ padding: '0.4rem 1rem' }}
+                                            >
+                                                Join
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="btn-delete"
+                                                onClick={() => handleDeleteMeeting(meeting.id)}
+                                                style={{ padding: '0.4rem 1rem' }}
+                                            >
+                                                Delete
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
                                 {meetings.length === 0 && (
                                     <tr>
-                                        <td colSpan="4" className="text-center">No meetings scheduled.</td>
+                                        <td colSpan="6" className="text-center">No meetings scheduled.</td>
                                     </tr>
                                 )}
                             </tbody>

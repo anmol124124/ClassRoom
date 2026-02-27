@@ -4,11 +4,11 @@ Course-Era is a modern, full-stack video conferencing and course management plat
 
 ## 🚀 Features
 
-- **Custom WebRTC Meetings**: High-quality, low-latency video and audio with a dynamic participants grid.
-- **Professional Background Effects**: Real-time AI-powered background blur and virtual backgrounds (Library, Office, or custom uploads) using MediaPipe Selfie Segmentation.
+- **Custom WebRTC Meetings**: High-quality, low-latency video and audio with a **dynamic, responsive participants grid** that scales automatically.
+- **Professional Background Effects**: AI-powered background blur and virtual backgrounds (Library, Office, or custom uploads) with **background-tab resilience** to prevent freezing.
 - **Real-Time Interactive Chat**: Integrated chat system with session history persistence and polished messaging UX.
-- **Screen Recording**: Capture meetings (with system audio) directly in the browser and download as `.webm`.
-- **Premium UI/UX**: Polished meeting controls, visual settings popovers, smooth animations, and a modern aesthetic.
+- **Premium UI/UX**: Polished meeting controls, visual settings popovers, smooth animations, and a modern aesthetic with perfectly aligned data tables.
+
 - **Role-Based Access Control**:
   - **Admin**: Full control over courses and meeting scheduling.
   - **Tutor**: Manage course content and join meetings.
