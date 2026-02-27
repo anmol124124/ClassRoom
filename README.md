@@ -4,30 +4,34 @@ Course-Era is a modern, full-stack video conferencing and course management plat
 
 ## 🚀 Features
 
-- **Custom WebRTC Meetings**: High-quality, low-latency video and audio.
+- **Custom WebRTC Meetings**: High-quality, low-latency video and audio with a dynamic participants grid.
+- **Professional Background Effects**: Real-time AI-powered background blur and virtual backgrounds (Library, Office, or custom uploads) using MediaPipe Selfie Segmentation.
+- **Real-Time Interactive Chat**: Integrated chat system with session history persistence and polished messaging UX.
 - **Screen Recording**: Capture meetings (with system audio) directly in the browser and download as `.webm`.
+- **Premium UI/UX**: Polished meeting controls, visual settings popovers, smooth animations, and a modern aesthetic.
 - **Role-Based Access Control**:
   - **Admin**: Full control over courses and meeting scheduling.
   - **Tutor**: Manage course content and join meetings.
   - **Student**: View courses and attend live meetings.
-- **Dynamic Video Grid**: Automatically adjusts layout based on the number of participants.
-- **Signaling System**: Fast and reliable peer discovery via WebSockets.
-- **CORS Support**: Ready for external access via ngrok or production deployment.
+- **Reliable Signaling**: High-speed peer discovery via WebSockets, optimized for stability.
+- **CORS & Global Access**: Production-ready configuration for external access via ngrok or cloud hosting.
 
 ## 🛠️ Tech Stack
 
 **Frontend:**
 - React (Vite)
-- WebRTC API
-- MediaRecorder API (for screen recording)
-- Axios for API communication
+- WebRTC & MediaRecorder APIs
+- **MediaPipe**: AI-driven selfie segmentation for background effects.
+- **Lucide React**: Modern, consistent icon library.
+- Axios for API communication.
 
 **Backend:**
 - FastAPI (Python)
 - SQLAlchemy (ORM)
+- **WebSockets**: Powering real-time signaling and chat persistence.
 - SQLite (Portable Database)
 - Uvicorn (ASGI Server)
-- WebSockets for Signaling
+
 
 ## 🛠️ Installation & Setup
 

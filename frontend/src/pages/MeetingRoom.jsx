@@ -3,7 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import useScreenRecorder from '../hooks/useScreenRecorder';
-import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Circle, Square, PhoneOff, Users, MonitorUp, Hand, X, MessageSquare, Send, Image as ImageIcon, Upload, Settings, Check } from 'lucide-react';
+import { BackgroundProcessor } from '../utils/BackgroundProcessor';
+
+
+
 
 const getInitials = (name) => {
     if (!name) return '?';
@@ -165,6 +169,15 @@ const MeetingRoom = () => {
     const prevPeersLengthRef = useRef(0);
     const chatEndRef = useRef(null);
 
+    // Background features state
+    const [backgroundEffect, setBackgroundEffect] = useState('none');
+    const [bgImageUrl, setBgImageUrl] = useState('');
+    const [showBgSettings, setShowBgSettings] = useState(false);
+    const backgroundProcessorRef = useRef(null);
+    const backgroundVideoRef = useRef(null); // Hidden video element for background processing
+
+
+
     const rtcConfig = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -194,12 +207,40 @@ const MeetingRoom = () => {
                 localStreamRef.current = stream;
                 setLocalStream(stream);
 
+                // Setup Background Processor
+                if (!backgroundProcessorRef.current) {
+                    backgroundProcessorRef.current = new BackgroundProcessor();
+                }
+
+                // Add hidden video for processing if it doesn't exist
+                if (!backgroundVideoRef.current) {
+                    const video = document.createElement('video');
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.autoplay = true;
+                    video.style.position = 'fixed';
+                    video.style.top = '-1000px';
+                    video.style.left = '-1000px';
+                    video.style.width = '1px';
+                    video.style.height = '1px';
+                    video.style.opacity = '0';
+                    video.id = 'background-proc-video';
+                    document.body.appendChild(video);
+                    backgroundVideoRef.current = video;
+                }
+
+
+                backgroundVideoRef.current.srcObject = stream;
+                await backgroundVideoRef.current.play();
+                backgroundProcessorRef.current.start(backgroundVideoRef.current);
+
                 // Setup local audio analysis
                 setupAudioAnalysis('local', stream);
 
                 setupSignaling(room_id, stream);
 
             } catch (err) {
+
                 console.error('Failed to initialize meeting:', err);
                 setError('Could not access camera/microphone or meeting not found.');
             } finally {
@@ -260,7 +301,12 @@ const MeetingRoom = () => {
             if (localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach(track => track.stop());
             }
+            if (backgroundVideoRef.current) {
+                backgroundVideoRef.current.srcObject = null;
+                backgroundVideoRef.current.remove();
+            }
         };
+
     }, [room_id, authUser]);
 
     const setupSignaling = (roomId, stream) => {
@@ -626,9 +672,10 @@ const MeetingRoom = () => {
     };
 
     const toggleMute = () => {
-        if (localStreamRef.current) {
+        const originalStream = localStreamRef.current; // This might be original or processed
+        if (originalStream) {
             const newMuteStatus = !isMuted;
-            localStreamRef.current.getAudioTracks().forEach(track => {
+            originalStream.getAudioTracks().forEach(track => {
                 track.enabled = !newMuteStatus;
             });
             setIsMuted(newMuteStatus);
@@ -644,12 +691,25 @@ const MeetingRoom = () => {
         }
     };
 
+
     const toggleVideo = () => {
-        if (localStreamRef.current) {
+        const stream = localStreamRef.current;
+        if (stream) {
             const newVideoStatus = !isVideoOff;
-            localStreamRef.current.getVideoTracks().forEach(track => {
+
+            // Disable/Enable the current active tracks (could be original or processed)
+            stream.getVideoTracks().forEach(track => {
                 track.enabled = !newVideoStatus;
             });
+
+            // CRITICAL: Also disable/enable the original camera tracks if we are in background mode
+            // This ensures the camera light actually goes off.
+            if (backgroundVideoRef.current?.srcObject) {
+                backgroundVideoRef.current.srcObject.getVideoTracks().forEach(track => {
+                    track.enabled = !newVideoStatus;
+                });
+            }
+
             setIsVideoOff(newVideoStatus);
 
             // Broadcast video status change
@@ -662,6 +722,7 @@ const MeetingRoom = () => {
             }
         }
     };
+
 
     const toggleHandRaise = () => {
         const newStatus = !isHandRaised;
@@ -677,7 +738,97 @@ const MeetingRoom = () => {
         }
     };
 
+    const handleBackgroundChange = async (type) => {
+        let url = '';
+        let effectType = type;
+
+        if (type === 'library') {
+            url = 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&q=80';
+            effectType = 'image';
+            setBackgroundEffect('image');
+        } else if (type === 'office') {
+            url = 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80';
+            effectType = 'image';
+            setBackgroundEffect('image');
+        } else {
+            setBackgroundEffect(type);
+        }
+
+        setBgImageUrl(url);
+
+        if (backgroundProcessorRef.current) {
+            backgroundProcessorRef.current.setEffect(effectType, url);
+
+            // Get the correct track to send
+            const processedTrack = backgroundProcessorRef.current.getStream().getVideoTracks()[0];
+            const originalStream = backgroundVideoRef.current?.srcObject;
+            const originalTrack = originalStream?.getVideoTracks()[0];
+            const videoTrack = type === 'none' ? originalTrack : processedTrack;
+
+            if (videoTrack) {
+                // Keep the enabled state in sync
+                videoTrack.enabled = !isVideoOff;
+
+                // CRITICAL: Update the ref so new connections and toggleVideo use the right tracks
+                const newStream = new MediaStream([videoTrack, ...localStreamRef.current.getAudioTracks()]);
+                localStreamRef.current = newStream;
+                setLocalStream(newStream);
+
+                // Replace track in all active peer connections
+                Object.values(peerConnections.current).forEach(async (pc) => {
+                    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) {
+                        try {
+                            await sender.replaceTrack(videoTrack);
+                        } catch (err) {
+                            console.error('Error replacing track for peer:', err);
+                        }
+                    }
+                });
+            }
+        }
+    };
+
+
+    const handleCustomBackgroundUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const url = event.target.result;
+                setBgImageUrl(url);
+                setBackgroundEffect('custom');
+
+                if (backgroundProcessorRef.current) {
+                    backgroundProcessorRef.current.setEffect('image', url);
+
+                    const processedTrack = backgroundProcessorRef.current.getStream().getVideoTracks()[0];
+                    if (processedTrack) {
+                        processedTrack.enabled = !isVideoOff;
+                        const newStream = new MediaStream([processedTrack, ...localStreamRef.current.getAudioTracks()]);
+                        localStreamRef.current = newStream;
+                        setLocalStream(newStream);
+
+                        Object.values(peerConnections.current).forEach(async (pc) => {
+                            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                            if (sender) {
+                                try {
+                                    await sender.replaceTrack(processedTrack);
+                                } catch (err) {
+                                    console.error('Error replacing track for peer:', err);
+                                }
+                            }
+                        });
+                    }
+                }
+            };
+
+            reader.readAsDataURL(file);
+        }
+    };
+
     const leaveMeeting = () => {
+
         if (isRecording) {
             stopRecording();
         }
@@ -746,7 +897,10 @@ const MeetingRoom = () => {
             screenStreamRef.current = null;
         }
 
-        const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+        const originalTrack = localStreamRef.current?.getVideoTracks()[0];
+        const processedTrack = backgroundProcessorRef.current?.getStream().getVideoTracks()[0];
+        const cameraTrack = (backgroundEffect === 'none' || !processedTrack) ? originalTrack : processedTrack;
+
         if (cameraTrack) {
             cameraTrack.enabled = !isVideoOff;
 
@@ -759,7 +913,8 @@ const MeetingRoom = () => {
             });
         }
 
-        setLocalStream(localStreamRef.current);
+        setLocalStream(backgroundEffect === 'none' ? localStreamRef.current : new MediaStream([cameraTrack, ...localStreamRef.current.getAudioTracks()]));
+
         setIsScreenSharing(false);
         setActivePresenterId(null);
 
@@ -1343,7 +1498,133 @@ const MeetingRoom = () => {
                     <PhoneOff size={20} />
                     Leave Room
                 </button>
+
+                {/* Professional Background Selector */}
+                <div style={{ position: 'relative' }}>
+                    <button
+                        onClick={() => setShowBgSettings(!showBgSettings)}
+                        style={{
+                            width: '56px', height: '56px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                            background: showBgSettings ? '#3b82f6' : '#f1f5f9', color: showBgSettings ? '#fff' : '#475569',
+                            display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                            outline: 'none',
+                        }}
+                        onMouseEnter={(e) => { if (!showBgSettings) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)'; } }}
+                        onMouseLeave={(e) => { if (!showBgSettings) { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; } }}
+                        title="Background Settings"
+                    >
+                        <ImageIcon size={24} />
+                    </button>
+
+                    {showBgSettings && (
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '80px',
+                            right: '0',
+                            width: '320px',
+                            background: '#fff',
+                            borderRadius: '20px',
+                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                            border: '1px solid #e5e7eb',
+                            padding: '1.5rem',
+                            zIndex: 100,
+                            animation: 'popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#111827' }}>Background Effects</h3>
+                                <button onClick={() => setShowBgSettings(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex' }}>
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                                {/* None */}
+                                <div
+                                    onClick={() => handleBackgroundChange('none')}
+                                    style={{
+                                        cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', border: `2px solid ${backgroundEffect === 'none' ? '#3b82f6' : '#f1f5f9'}`,
+                                        position: 'relative', aspectRatio: '16/9', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'none' ? '#3b82f6' : '#cbd5e1'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'none' ? '#3b82f6' : '#f1f5f9'; }}
+                                >
+                                    <VideoOff size={24} color="#94a3b8" />
+                                    {backgroundEffect === 'none' && <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3b82f6', borderRadius: '50%', padding: '2px', display: 'flex' }}><Check size={12} color="#fff" /></div>}
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.9)', color: '#475569', fontSize: '10px', padding: '4px', textAlign: 'center', fontWeight: '500' }}>None</div>
+                                </div>
+
+                                {/* Blur */}
+                                <div
+                                    onClick={() => handleBackgroundChange('blur')}
+                                    style={{
+                                        cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', border: `2px solid ${backgroundEffect === 'blur' ? '#3b82f6' : '#f1f5f9'}`,
+                                        position: 'relative', aspectRatio: '16/9', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'blur' ? '#3b82f6' : '#cbd5e1'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'blur' ? '#3b82f6' : '#f1f5f9'; }}
+                                >
+                                    <div style={{ width: '100%', height: '100%', filter: 'blur(4px)', background: 'linear-gradient(45deg, #e2e8f0, #cbd5e1)' }}></div>
+                                    <Circle size={24} color="#fff" style={{ position: 'absolute' }} />
+                                    {backgroundEffect === 'blur' && <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3b82f6', borderRadius: '50%', padding: '2px', display: 'flex' }}><Check size={12} color="#fff" /></div>}
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.9)', color: '#475569', fontSize: '10px', padding: '4px', textAlign: 'center', fontWeight: '500' }}>Blur</div>
+                                </div>
+
+                                {/* Library */}
+                                <div
+                                    onClick={() => handleBackgroundChange('library')}
+                                    style={{
+                                        cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', border: `2px solid ${backgroundEffect === 'image' && bgImageUrl.includes('photo-1507842217343') ? '#3b82f6' : '#f1f5f9'}`,
+                                        position: 'relative', aspectRatio: '16/9', transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = (backgroundEffect === 'image' && bgImageUrl.includes('photo-1507842217343')) ? '#3b82f6' : '#cbd5e1'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = (backgroundEffect === 'image' && bgImageUrl.includes('photo-1507842217343')) ? '#3b82f6' : '#f1f5f9'; }}
+                                >
+                                    <img src="https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=200&q=60" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Library" />
+                                    {(backgroundEffect === 'image' && bgImageUrl.includes('photo-1507842217343')) && <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3b82f6', borderRadius: '50%', padding: '2px', display: 'flex' }}><Check size={12} color="#fff" /></div>}
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.9)', color: '#475569', fontSize: '10px', padding: '4px', textAlign: 'center', fontWeight: '500' }}>Library</div>
+                                </div>
+
+                                {/* Office */}
+                                <div
+                                    onClick={() => handleBackgroundChange('office')}
+                                    style={{
+                                        cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', border: `2px solid ${backgroundEffect === 'image' && bgImageUrl.includes('photo-1497366216548') ? '#3b82f6' : '#f1f5f9'}`,
+                                        position: 'relative', aspectRatio: '16/9', transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = (backgroundEffect === 'image' && bgImageUrl.includes('photo-1497366216548')) ? '#3b82f6' : '#cbd5e1'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = (backgroundEffect === 'image' && bgImageUrl.includes('photo-1497366216548')) ? '#3b82f6' : '#f1f5f9'; }}
+                                >
+                                    <img src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=200&q=60" style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Office" />
+                                    {(backgroundEffect === 'image' && bgImageUrl.includes('photo-1497366216548')) && <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3b82f6', borderRadius: '50%', padding: '2px', display: 'flex' }}><Check size={12} color="#fff" /></div>}
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.9)', color: '#475569', fontSize: '10px', padding: '4px', textAlign: 'center', fontWeight: '500' }}>Office</div>
+                                </div>
+
+                                {/* Custom Upload Tile */}
+                                <label style={{
+                                    cursor: 'pointer', borderRadius: '12px', overflow: 'hidden', border: `2px solid ${backgroundEffect === 'custom' ? '#3b82f6' : '#f1f5f9'}`,
+                                    position: 'relative', aspectRatio: '16/9', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'custom' ? '#3b82f6' : '#cbd5e1'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = backgroundEffect === 'custom' ? '#3b82f6' : '#f1f5f9'; }}
+                                >
+                                    <Upload size={20} color="#64748b" />
+                                    <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>Custom</span>
+                                    <input type="file" accept="image/*" onChange={handleCustomBackgroundUpload} style={{ display: 'none' }} />
+                                    {backgroundEffect === 'custom' && <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3b82f6', borderRadius: '50%', padding: '2px', display: 'flex' }}><Check size={12} color="#fff" /></div>}
+                                </label>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+
+
             </footer>
+
 
             {/* Notification Toast */}
             {toast && (
@@ -1374,7 +1655,18 @@ const MeetingRoom = () => {
                     from { transform: translateX(100%); opacity: 0; }
                     to { transform: translateX(0); opacity: 1; }
                 }
+
+                @keyframes popIn {
+                    from { transform: scale(0.9) translateY(20px); opacity: 0; }
+                    to { transform: scale(1) translateY(0); opacity: 1; }
+                }
+
+                @keyframes bounce {
+                    from { transform: translateY(0); }
+                    to { transform: translateY(-3px); }
+                }
             `}</style>
+
         </div>
     );
 };
